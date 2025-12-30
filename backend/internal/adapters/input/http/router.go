@@ -72,6 +72,7 @@ func (r *Router) Setup() http.Handler {
 	rooms := api.PathPrefix("/rooms").Subrouter()
 	rooms.Use(r.authMiddleware.Authenticate)
 	rooms.HandleFunc("", r.roomHandler.CreateRoom).Methods("POST")
+	rooms.HandleFunc("/my-rooms", r.roomHandler.GetUserRooms).Methods("GET")
 	rooms.HandleFunc("/{id}", r.roomHandler.GetRoom).Methods("GET")
 	rooms.HandleFunc("/{id}/join", r.roomHandler.JoinRoom).Methods("POST")
 	rooms.HandleFunc("/{id}/leave", r.roomHandler.LeaveRoom).Methods("POST")

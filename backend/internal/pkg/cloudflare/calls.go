@@ -56,9 +56,16 @@ type GenerateTokenResponse struct {
 
 // CreateSession creates a new Cloudflare Calls session
 func (s *CallsService) CreateSession(roomID string) (*CreateSessionResponse, error) {
+	// Validate that appID and appSecret are configured
+	if s.appID == "" || s.appSecret == "" {
+		return nil, fmt.Errorf("cloudflare credentials not configured: appID=%s, appSecret=%s", s.appID, maskSecret(s.appSecret))
+	}
+
 	url := fmt.Sprintf("%s/%s/sessions/new", s.baseURL, s.appID)
 
-	req, err := http.NewRequest("POST", url, nil)
+	// Create an empty JSON object for the request body
+	reqBody := []byte("{}")
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(reqBody))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -75,15 +82,26 @@ func (s *CallsService) CreateSession(roomID string) (*CreateSessionResponse, err
 	body, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		return nil, fmt.Errorf("cloudflare API error: %s, body: %s", resp.Status, string(body))
+		return nil, fmt.Errorf("cloudflare API error (status %d): %s, body: %s", resp.StatusCode, resp.Status, string(body))
 	}
 
 	var result CreateSessionResponse
 	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
+		return nil, fmt.Errorf("failed to parse response: %w, body: %s", err, string(body))
 	}
 
 	return &result, nil
+}
+
+// maskSecret masks the secret for logging purposes
+func maskSecret(secret string) string {
+	if secret == "" {
+		return "<empty>"
+	}
+	if len(secret) <= 8 {
+		return "****"
+	}
+	return secret[:4] + "****" + secret[len(secret)-4:]
 }
 
 // GenerateToken generates a token for joining a session

@@ -11,6 +11,7 @@ type Service interface {
 	JoinRoom(ctx context.Context, roomID, userID, userName, avatar string) (*Room, error)
 	LeaveRoom(ctx context.Context, roomID, userID string) (*Room, error)
 	GetRoomDetails(ctx context.Context, roomID string) (*Room, error)
+	GetUserRooms(ctx context.Context, userID string) ([]*Room, error)
 	EndRoom(ctx context.Context, roomID, userID string) error
 	GetActiveParticipants(ctx context.Context, roomID string) ([]Participant, error)
 	SetSessionID(ctx context.Context, roomID, sessionID string) error
@@ -86,6 +87,15 @@ func (s *service) GetRoomDetails(ctx context.Context, roomID string) (*Room, err
 	}
 
 	return room, nil
+}
+
+func (s *service) GetUserRooms(ctx context.Context, userID string) ([]*Room, error) {
+	rooms, err := s.repo.FindByCreator(ctx, userID)
+	if err != nil {
+		return nil, errors.NewInternalError("failed to get user rooms", err)
+	}
+
+	return rooms, nil
 }
 
 func (s *service) EndRoom(ctx context.Context, roomID, userID string) error {

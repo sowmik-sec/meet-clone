@@ -66,3 +66,24 @@ func (r *RoomRepository) FindActiveRooms(ctx context.Context, limit, offset int)
 
 	return rooms, nil
 }
+
+func (r *RoomRepository) FindByCreator(ctx context.Context, createdBy string) ([]*room.Room, error) {
+	opts := options.Find().
+		SetSort(bson.M{"created_at": -1})
+
+	cursor, err := r.collection.Find(ctx, bson.M{
+		"created_by": createdBy,
+		"status":     room.RoomStatusActive,
+	}, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var rooms []*room.Room
+	if err := cursor.All(ctx, &rooms); err != nil {
+		return nil, err
+	}
+
+	return rooms, nil
+}

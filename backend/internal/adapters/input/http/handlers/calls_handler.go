@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/meet-clone/backend/internal/core/domain/room"
@@ -28,25 +29,30 @@ type CreateSessionRequest struct {
 func (h *CallsHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 	var req CreateSessionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		logger.Error.Printf("Invalid request body: %v", err)
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
 	if req.RoomID == "" {
+		logger.Error.Println("Room ID is required but not provided")
 		http.Error(w, "Room ID is required", http.StatusBadRequest)
 		return
 	}
 
+	logger.Info.Printf("Creating Cloudflare session for room: %s", req.RoomID)
+
 	// Check if room exists and has a session
 	roomDetails, err := h.roomService.GetRoomDetails(r.Context(), req.RoomID)
 	if err != nil {
-		logger.Error.Printf("Failed to get room: %v", err)
+		logger.Error.Printf("Failed to get room %s: %v", req.RoomID, err)
 		http.Error(w, "Failed to get room", http.StatusNotFound)
 		return
 	}
 
 	// If room already has a session ID, return it
 	if roomDetails.CloudflareSessionID != "" {
+		logger.Info.Printf("Room %s already has session ID: %s", req.RoomID, roomDetails.CloudflareSessionID)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{
 			"sessionId": roomDetails.CloudflareSessionID,
@@ -54,19 +60,24 @@ func (h *CallsHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	logger.Info.Printf("Creating new Cloudflare session for room: %s", req.RoomID)
 	session, err := h.service.CreateSession(req.RoomID)
 	if err != nil {
-		logger.Error.Printf("Failed to create session: %v", err)
-		http.Error(w, "Failed to create session", http.StatusInternalServerError)
+		logger.Error.Printf("Failed to create Cloudflare session for room %s: %v", req.RoomID, err)
+		http.Error(w, fmt.Sprintf("Failed to create session: %v", err), http.StatusInternalServerError)
 		return
 	}
 
+	logger.Info.Printf("Successfully created Cloudflare session %s for room %s", session.SessionID, req.RoomID)
+
 	// Save session ID to room
 	if err := h.roomService.SetSessionID(r.Context(), req.RoomID, session.SessionID); err != nil {
-		logger.Error.Printf("Failed to update room with session ID: %v", err)
+		logger.Error.Printf("Failed to update room %s with session ID %s: %v", req.RoomID, session.SessionID, err)
 		http.Error(w, "Failed to persist session", http.StatusInternalServerError)
 		return
 	}
+
+	logger.Info.Printf("Successfully saved session ID %s to room %s", session.SessionID, req.RoomID)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(session)

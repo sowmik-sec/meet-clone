@@ -5,9 +5,9 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
+	"github.com/meet-clone/backend/internal/adapters/input/http/middleware"
 	"github.com/meet-clone/backend/internal/core/domain/room"
 	"github.com/meet-clone/backend/internal/pkg/errors"
-	"github.com/meet-clone/backend/internal/pkg/jwt"
 )
 
 type RoomHandler struct {
@@ -21,7 +21,7 @@ func NewRoomHandler(roomService room.Service) *RoomHandler {
 }
 
 func (h *RoomHandler) CreateRoom(w http.ResponseWriter, r *http.Request) {
-	claims, ok := r.Context().Value("user").(*jwt.Claims)
+	claims, ok := middleware.GetUserFromContext(r.Context())
 	if !ok {
 		respondError(w, errors.NewUnauthorizedError("unauthorized"), http.StatusUnauthorized)
 		return
@@ -63,7 +63,7 @@ type JoinRoomRequest struct {
 }
 
 func (h *RoomHandler) JoinRoom(w http.ResponseWriter, r *http.Request) {
-	claims, ok := r.Context().Value("user").(*jwt.Claims)
+	claims, ok := middleware.GetUserFromContext(r.Context())
 	if !ok {
 		respondError(w, errors.NewUnauthorizedError("unauthorized"), http.StatusUnauthorized)
 		return
@@ -92,7 +92,7 @@ func (h *RoomHandler) JoinRoom(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *RoomHandler) LeaveRoom(w http.ResponseWriter, r *http.Request) {
-	claims, ok := r.Context().Value("user").(*jwt.Claims)
+	claims, ok := middleware.GetUserFromContext(r.Context())
 	if !ok {
 		respondError(w, errors.NewUnauthorizedError("unauthorized"), http.StatusUnauthorized)
 		return
@@ -115,7 +115,7 @@ func (h *RoomHandler) LeaveRoom(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *RoomHandler) EndRoom(w http.ResponseWriter, r *http.Request) {
-	claims, ok := r.Context().Value("user").(*jwt.Claims)
+	claims, ok := middleware.GetUserFromContext(r.Context())
 	if !ok {
 		respondError(w, errors.NewUnauthorizedError("unauthorized"), http.StatusUnauthorized)
 		return
@@ -152,4 +152,24 @@ func (h *RoomHandler) GetParticipants(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, participants, http.StatusOK)
+}
+
+func (h *RoomHandler) GetUserRooms(w http.ResponseWriter, r *http.Request) {
+	claims, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		respondError(w, errors.NewUnauthorizedError("unauthorized"), http.StatusUnauthorized)
+		return
+	}
+
+	rooms, err := h.roomService.GetUserRooms(r.Context(), claims.UserID)
+	if err != nil {
+		if appErr, ok := err.(*errors.AppError); ok {
+			respondError(w, appErr, getStatusCode(appErr.Type))
+			return
+		}
+		respondError(w, errors.NewInternalError("failed to get user rooms", err), http.StatusInternalServerError)
+		return
+	}
+
+	respondJSON(w, rooms, http.StatusOK)
 }
