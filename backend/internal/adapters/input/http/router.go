@@ -2,6 +2,7 @@ package http
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
@@ -52,14 +53,20 @@ func (r *Router) Setup() http.Handler {
 		handlers.AllowCredentials(),
 	)
 
+	// Create rate limiter (100 requests per minute per IP)
+	rateLimiter := middleware.NewRateLimiter(100, time.Minute)
+
+	// Apply global middleware
+	r.router.Use(middleware.SecurityHeaders)
+	r.router.Use(middleware.RequestValidator)
+	r.router.Use(middleware.Logger)
+
 	// API version prefix
 	api := r.router.PathPrefix("/api/v1").Subrouter()
 
-	// Apply logger middleware
-	api.Use(middleware.Logger)
-
-	// Public routes - Auth
+	// Public routes - Auth (with rate limiting to prevent brute force)
 	auth := api.PathPrefix("/auth").Subrouter()
+	auth.Use(rateLimiter.Limit) // Stricter rate limiting for auth endpoints
 	auth.HandleFunc("/register", r.authHandler.Register).Methods("POST")
 	auth.HandleFunc("/login", r.authHandler.Login).Methods("POST")
 
