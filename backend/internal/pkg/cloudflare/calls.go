@@ -10,17 +10,19 @@ import (
 )
 
 type CallsService struct {
+	accountID string
+	apiToken  string
 	appID     string
-	appSecret string
 	baseURL   string
 	client    *http.Client
 }
 
-func NewCallsService(appID, appSecret string) *CallsService {
+func NewCallsService(accountID, apiToken, appID string) *CallsService {
 	return &CallsService{
+		accountID: accountID,
+		apiToken:  apiToken,
 		appID:     appID,
-		appSecret: appSecret,
-		baseURL:   "https://rtc.live.cloudflare.com/v1/apps",
+		baseURL:   "https://api.cloudflare.com/client/v4",
 		client: &http.Client{
 			Timeout: 10 * time.Second,
 		},
@@ -56,12 +58,14 @@ type GenerateTokenResponse struct {
 
 // CreateSession creates a new Cloudflare Calls session
 func (s *CallsService) CreateSession(roomID string) (*CreateSessionResponse, error) {
-	// Validate that appID and appSecret are configured
-	if s.appID == "" || s.appSecret == "" {
-		return nil, fmt.Errorf("cloudflare credentials not configured: appID=%s, appSecret=%s", s.appID, maskSecret(s.appSecret))
+	// Validate that credentials are configured
+	if s.accountID == "" || s.apiToken == "" || s.appID == "" {
+		return nil, fmt.Errorf("cloudflare credentials not configured: accountID=%s, apiToken=%s, appID=%s",
+			maskSecret(s.accountID), maskSecret(s.apiToken), s.appID)
 	}
 
-	url := fmt.Sprintf("%s/%s/sessions/new", s.baseURL, s.appID)
+	// Using Cloudflare API v4 endpoint
+	url := fmt.Sprintf("%s/accounts/%s/calls/apps/%s/sessions/new", s.baseURL, s.accountID, s.appID)
 
 	// Create an empty JSON object for the request body
 	reqBody := []byte("{}")
@@ -70,7 +74,7 @@ func (s *CallsService) CreateSession(roomID string) (*CreateSessionResponse, err
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", s.appSecret))
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", s.apiToken))
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := s.client.Do(req)
@@ -106,7 +110,8 @@ func maskSecret(secret string) string {
 
 // GenerateToken generates a token for joining a session
 func (s *CallsService) GenerateToken(sessionID string) (*GenerateTokenResponse, error) {
-	url := fmt.Sprintf("%s/%s/sessions/%s/tokens/new", s.baseURL, s.appID, sessionID)
+	// Using Cloudflare API v4 endpoint
+	url := fmt.Sprintf("%s/accounts/%s/calls/apps/%s/sessions/%s/tokens/new", s.baseURL, s.accountID, s.appID, sessionID)
 
 	tokenReq := GenerateTokenRequest{
 		SessionID: sessionID,
@@ -123,7 +128,7 @@ func (s *CallsService) GenerateToken(sessionID string) (*GenerateTokenResponse, 
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", s.appSecret))
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", s.apiToken))
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := s.client.Do(req)
@@ -148,14 +153,14 @@ func (s *CallsService) GenerateToken(sessionID string) (*GenerateTokenResponse, 
 
 // DeleteSession deletes a Cloudflare Calls session
 func (s *CallsService) DeleteSession(sessionID string) error {
-	url := fmt.Sprintf("%s/%s/sessions/%s", s.baseURL, s.appID, sessionID)
+	url := fmt.Sprintf("%s/accounts/%s/calls/apps/%s/sessions/%s", s.baseURL, s.accountID, s.appID, sessionID)
 
 	req, err := http.NewRequest("DELETE", url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", s.appSecret))
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", s.apiToken))
 
 	resp, err := s.client.Do(req)
 	if err != nil {

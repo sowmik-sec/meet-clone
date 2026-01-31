@@ -15,8 +15,9 @@ type Config struct {
 	Port                string
 	Environment         string
 	CORSOrigin          string
+	CloudflareAccountID string
+	CloudflareAPIToken  string
 	CloudflareAppID     string
-	CloudflareAppSecret string
 }
 
 func Load() *Config {
@@ -37,8 +38,9 @@ func Load() *Config {
 		Port:                getEnv("PORT", "8080"),
 		Environment:         getEnv("ENV", "development"),
 		CORSOrigin:          getEnv("CORS_ORIGIN", "http://localhost:3000"),
+		CloudflareAccountID: getEnv("CLOUDFLARE_ACCOUNT_ID", ""),
+		CloudflareAPIToken:  getEnv("CLOUDFLARE_API_TOKEN", ""),
 		CloudflareAppID:     getEnv("CLOUDFLARE_APP_ID", ""),
-		CloudflareAppSecret: getEnv("CLOUDFLARE_APP_SECRET", ""),
 	}
 }
 
