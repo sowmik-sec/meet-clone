@@ -128,14 +128,14 @@ export default function DashboardPage() {
         </div>
 
         {/* Active Rooms Section */}
-        {activeRooms.length > 0 && (
+        {activeRooms?.length > 0 && (
           <Card className="mt-12">
             <CardHeader>
               <CardTitle>Your Active Meetings</CardTitle>
               <CardDescription>Meetings you&apos;ve joined or created</CardDescription>
             </CardHeader>
             <CardContent className="divide-y">
-              {activeRooms.map((room) => (
+              {activeRooms?.map((room) => (
                 <div key={room.id} className="py-4 first:pt-0 last:pb-0">
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
