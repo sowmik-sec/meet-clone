@@ -60,7 +60,7 @@ func main() {
 	jwtService := jwt.NewJWTService(cfg.JWTSecret, cfg.JWTExpiry)
 
 	// Initialize Cloudflare Calls service
-	callsService := cloudflare.NewCallsService(cfg.CloudflareAccountID, cfg.CloudflareAPIToken, cfg.CloudflareAppID)
+	callsService := cloudflare.NewCallsService(cfg.CloudflareAccountID, cfg.CloudflareAPIToken, cfg.CloudflareAppID, cfg.CloudflareAppSecret)
 
 	// Initialize WebSocket hub
 	wsHub := websocket.NewHub(chatService)

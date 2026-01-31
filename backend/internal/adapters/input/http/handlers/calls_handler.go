@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/meet-clone/backend/internal/adapters/input/http/middleware"
 	"github.com/meet-clone/backend/internal/core/domain/room"
 	"github.com/meet-clone/backend/internal/pkg/cloudflare"
+	"github.com/meet-clone/backend/internal/pkg/jwt"
 	"github.com/meet-clone/backend/internal/pkg/logger"
 )
 
@@ -99,7 +101,18 @@ func (h *CallsHandler) GenerateToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := h.service.GenerateToken(req.SessionID)
+	// Get user ID from context
+	userID := ""
+	if claims, ok := r.Context().Value(middleware.UserContextKey).(*jwt.Claims); ok {
+		userID = claims.UserID
+	}
+
+	if userID == "" {
+		http.Error(w, "User not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	token, err := h.service.GenerateToken(req.SessionID, userID)
 	if err != nil {
 		logger.Error.Printf("Failed to generate token: %v", err)
 		http.Error(w, "Failed to generate token", http.StatusInternalServerError)

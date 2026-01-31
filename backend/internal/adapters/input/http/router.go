@@ -89,7 +89,7 @@ func (r *Router) Setup() http.Handler {
 
 	// Protected routes - Calls
 	calls := api.PathPrefix("/calls").Subrouter()
-	// calls.Use(r.authMiddleware.Authenticate) // Uncomment if authentication is needed, but for now we might leave it open or handle in handler
+	calls.Use(r.authMiddleware.Authenticate)
 	calls.HandleFunc("/sessions", r.callsHandler.CreateSession).Methods("POST")
 	calls.HandleFunc("/sessions/token", r.callsHandler.GenerateToken).Methods("POST")
 

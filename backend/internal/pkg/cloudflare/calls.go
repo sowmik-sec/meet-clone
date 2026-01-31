@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"time"
 )
@@ -13,15 +14,17 @@ type CallsService struct {
 	accountID string
 	apiToken  string
 	appID     string
+	appSecret string
 	baseURL   string
 	client    *http.Client
 }
 
-func NewCallsService(accountID, apiToken, appID string) *CallsService {
+func NewCallsService(accountID, apiToken, appID, appSecret string) *CallsService {
 	return &CallsService{
 		accountID: accountID,
 		apiToken:  apiToken,
 		appID:     appID,
+		appSecret: appSecret,
 		baseURL:   "https://api.cloudflare.com/client/v4",
 		client: &http.Client{
 			Timeout: 10 * time.Second,
@@ -30,13 +33,14 @@ func NewCallsService(accountID, apiToken, appID string) *CallsService {
 }
 
 type CreateSessionRequest struct {
-	SessionDescription string `json:"sessionDescription,omitempty"`
+	Title string `json:"title,omitempty"`
 }
 
 type CreateSessionResponse struct {
 	SessionID          string  `json:"sessionId"`
-	SessionDescription string  `json:"sessionDescription"`
-	Tracks             []Track `json:"tracks"`
+	MeetingID          string  `json:"meetingId"`
+	SessionDescription string  `json:"sessionDescription,omitempty"`
+	Tracks             []Track `json:"tracks,omitempty"`
 }
 
 type Track struct {
@@ -56,7 +60,7 @@ type GenerateTokenResponse struct {
 	ExpiresAt time.Time `json:"expiresAt"`
 }
 
-// CreateSession creates a new Cloudflare Calls session
+// CreateSession creates a new Cloudflare RealtimeKit meeting and returns meeting ID
 func (s *CallsService) CreateSession(roomID string) (*CreateSessionResponse, error) {
 	// Validate that credentials are configured
 	if s.accountID == "" || s.apiToken == "" || s.appID == "" {
@@ -64,14 +68,24 @@ func (s *CallsService) CreateSession(roomID string) (*CreateSessionResponse, err
 			maskSecret(s.accountID), maskSecret(s.apiToken), s.appID)
 	}
 
-	// Using Cloudflare API v4 endpoint
-	url := fmt.Sprintf("%s/accounts/%s/calls/apps/%s/sessions/new", s.baseURL, s.accountID, s.appID)
+	// Step 1: Create a meeting using RealtimeKit API
+	meetingURL := fmt.Sprintf("%s/accounts/%s/realtime/kit/%s/meetings", s.baseURL, s.accountID, s.appID)
 
-	// Create an empty JSON object for the request body
-	reqBody := []byte("{}")
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(reqBody))
+	log.Printf("[Cloudflare] Creating meeting - URL: %s", meetingURL)
+	log.Printf("[Cloudflare] AccountID: %s, AppID: %s", maskSecret(s.accountID), s.appID)
+
+	meetingReq := map[string]interface{}{
+		"title": fmt.Sprintf("Room %s", roomID),
+	}
+
+	meetingBody, err := json.Marshal(meetingReq)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, fmt.Errorf("failed to marshal meeting request: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", meetingURL, bytes.NewBuffer(meetingBody))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create meeting request: %w", err)
 	}
 
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", s.apiToken))
@@ -79,22 +93,38 @@ func (s *CallsService) CreateSession(roomID string) (*CreateSessionResponse, err
 
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create session: %w", err)
+		log.Printf("[Cloudflare] Meeting request failed: %v", err)
+		return nil, fmt.Errorf("failed to create meeting: %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
 
+	log.Printf("[Cloudflare] Meeting Response Status: %d, Body: %s", resp.StatusCode, string(body))
+
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		return nil, fmt.Errorf("cloudflare API error (status %d): %s, body: %s", resp.StatusCode, resp.Status, string(body))
 	}
 
-	var result CreateSessionResponse
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w, body: %s", err, string(body))
+	var meetingResp struct {
+		Success bool `json:"success"`
+		Data    struct {
+			MeetingID string `json:"id"`
+		} `json:"data"`
 	}
 
-	return &result, nil
+	if err := json.Unmarshal(body, &meetingResp); err != nil {
+		return nil, fmt.Errorf("failed to parse meeting response: %w, body: %s", err, string(body))
+	}
+
+	if !meetingResp.Success || meetingResp.Data.MeetingID == "" {
+		return nil, fmt.Errorf("failed to get meeting ID from response: %s", string(body))
+	}
+
+	return &CreateSessionResponse{
+		SessionID: meetingResp.Data.MeetingID,
+		MeetingID: meetingResp.Data.MeetingID,
+	}, nil
 }
 
 // maskSecret masks the secret for logging purposes
@@ -108,22 +138,28 @@ func maskSecret(secret string) string {
 	return secret[:4] + "****" + secret[len(secret)-4:]
 }
 
-// GenerateToken generates a token for joining a session
-func (s *CallsService) GenerateToken(sessionID string) (*GenerateTokenResponse, error) {
-	// Using Cloudflare API v4 endpoint
-	url := fmt.Sprintf("%s/accounts/%s/calls/apps/%s/sessions/%s/tokens/new", s.baseURL, s.accountID, s.appID, sessionID)
+// GenerateToken generates a participant token by calling Cloudflare's API
+func (s *CallsService) GenerateToken(sessionID, participantID string) (*GenerateTokenResponse, error) {
+	// Call Cloudflare API to create participant and get auth token
+	participantURL := fmt.Sprintf("%s/accounts/%s/realtime/kit/%s/meetings/%s/participants",
+		s.baseURL, s.accountID, s.appID, sessionID)
 
-	tokenReq := GenerateTokenRequest{
-		SessionID: sessionID,
-		TTL:       3600, // 1 hour
+	log.Printf("[Cloudflare] Creating participant via API - URL: %s, ParticipantID: %s", participantURL, participantID)
+
+	participantReq := map[string]interface{}{
+		"custom_participant_id": participantID,
+		"name":                  "Participant",
+		"preset_name":           "group_call_participant",
 	}
 
-	jsonData, err := json.Marshal(tokenReq)
+	jsonData, err := json.Marshal(participantReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	log.Printf("[Cloudflare] Participant Request Body: %s", string(jsonData))
+
+	req, err := http.NewRequest("POST", participantURL, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -133,27 +169,44 @@ func (s *CallsService) GenerateToken(sessionID string) (*GenerateTokenResponse, 
 
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate token: %w", err)
+		return nil, fmt.Errorf("failed to create participant: %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
 
+	log.Printf("[Cloudflare] Participant Response Status: %d, Body: %s", resp.StatusCode, string(body))
+
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		return nil, fmt.Errorf("cloudflare API error: %s, body: %s", resp.Status, string(body))
 	}
 
-	var result GenerateTokenResponse
-	if err := json.Unmarshal(body, &result); err != nil {
+	var participantResp struct {
+		Success bool `json:"success"`
+		Data    struct {
+			Token string `json:"token"`
+		} `json:"data"`
+	}
+
+	if err := json.Unmarshal(body, &participantResp); err != nil {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 
-	return &result, nil
+	if !participantResp.Success || participantResp.Data.Token == "" {
+		return nil, fmt.Errorf("failed to get auth token from response: %s", string(body))
+	}
+
+	log.Printf("[Cloudflare] Successfully generated auth token for participant %s", participantID)
+
+	return &GenerateTokenResponse{
+		Token:     participantResp.Data.Token,
+		ExpiresAt: time.Now().Add(24 * time.Hour),
+	}, nil
 }
 
-// DeleteSession deletes a Cloudflare Calls session
+// DeleteSession deletes a Cloudflare RealtimeKit meeting
 func (s *CallsService) DeleteSession(sessionID string) error {
-	url := fmt.Sprintf("%s/accounts/%s/calls/apps/%s/sessions/%s", s.baseURL, s.accountID, s.appID, sessionID)
+	url := fmt.Sprintf("%s/accounts/%s/realtime/kit/%s/meetings/%s", s.baseURL, s.accountID, s.appID, sessionID)
 
 	req, err := http.NewRequest("DELETE", url, nil)
 	if err != nil {

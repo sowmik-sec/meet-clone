@@ -18,6 +18,7 @@ type Config struct {
 	CloudflareAccountID string
 	CloudflareAPIToken  string
 	CloudflareAppID     string
+	CloudflareAppSecret string
 }
 
 func Load() *Config {
@@ -41,6 +42,7 @@ func Load() *Config {
 		CloudflareAccountID: getEnv("CLOUDFLARE_ACCOUNT_ID", ""),
 		CloudflareAPIToken:  getEnv("CLOUDFLARE_API_TOKEN", ""),
 		CloudflareAppID:     getEnv("CLOUDFLARE_APP_ID", ""),
+		CloudflareAppSecret: getEnv("CLOUDFLARE_APP_SECRET", ""),
 	}
 }
 
