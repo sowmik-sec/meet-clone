@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { login, isLoading, error } = useAuth();
   const [formData, setFormData] = useState({
     email: '',
@@ -21,7 +22,12 @@ export default function LoginPage() {
     e.preventDefault();
     try {
       await login(formData);
-      router.push('/dashboard');
+      // Redirect to the intended destination or dashboard
+      const redirectTo = searchParams.get('redirect') || '/dashboard';
+      // Use setTimeout to ensure auth state is persisted before redirect
+      setTimeout(() => {
+        router.push(redirectTo);
+      }, 100);
     } catch {
       // Error is handled by useAuth hook
     }

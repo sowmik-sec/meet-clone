@@ -44,14 +44,18 @@ func NewRoom(createdBy string, maxCapacity int) *Room {
 }
 
 func (r *Room) AddParticipant(userID, name, avatar string) error {
-	if len(r.Participants) >= r.MaxCapacity {
+	if len(r.GetActiveParticipants()) >= r.MaxCapacity {
 		return &RoomError{Message: "room is at maximum capacity"}
 	}
 
-	// Check if user is already in the room
-	for _, p := range r.Participants {
+	// Check if user is already in the room (actively)
+	for i, p := range r.Participants {
 		if p.UserID == userID && p.LeftAt.IsZero() {
-			return &RoomError{Message: "user is already in the room"}
+			// User is trying to rejoin - this is okay, just return success
+			// Update their info in case name/avatar changed
+			r.Participants[i].Name = name
+			r.Participants[i].Avatar = avatar
+			return nil
 		}
 	}
 

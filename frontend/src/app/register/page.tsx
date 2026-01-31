@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 
 export default function RegisterPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { register, isLoading, error } = useAuth();
   const [formData, setFormData] = useState({
     name: '',
@@ -22,7 +23,11 @@ export default function RegisterPage() {
     e.preventDefault();
     try {
       await register(formData);
-      router.push('/dashboard');
+      const redirectTo = searchParams.get('redirect') || '/dashboard';
+      // Use setTimeout to ensure auth state is persisted before redirect
+      setTimeout(() => {
+        router.push(redirectTo);
+      }, 100);
     } catch {
       // Error is handled by useAuth hook
     }

@@ -9,6 +9,7 @@ import {
 import { useAuthStore } from '@/store/authStore';
 import { roomApi } from '@/lib/api/room';
 import { callsApi } from '@/lib/api/calls';
+import { AxiosError } from 'axios';
 
 function MeetingUI() {
   const { meeting } = useRealtimeKitMeeting();
@@ -37,17 +38,40 @@ export default function RoomPage() {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      router.push('/login');
+      // Store the current room URL and redirect to login
+      const currentPath = `/room/${roomId}`;
+      router.push(`/login?redirect=${encodeURIComponent(currentPath)}`);
       return;
     }
 
     const initRoom = async () => {
       try {
-        // Join room through backend
-        await roomApi.joinRoom(roomId, {
-          user_name: user?.name || 'Unknown',
-          avatar: user?.avatar || '',
-        });
+        // Try to join the room
+        try {
+          await roomApi.joinRoom(roomId, {
+            user_name: user?.name || 'Anonymous User',
+            avatar: user?.avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + (user?.email || 'default'),
+          });
+        } catch (joinError) {
+          const axiosError = joinError as AxiosError<{ error?: string; message?: string }>;
+          
+          // If join fails with 404, room doesn't exist
+          if (axiosError.response?.status === 404) {
+            console.error('Room not found.');
+            alert('This meeting does not exist. Please create a new meeting or use a valid meeting ID.');
+            router.push('/dashboard');
+            return;
+          }
+          
+          // If join fails with 400, user might already be in the room or room validation failed
+          if (axiosError.response?.status === 400) {
+            const errorMsg = axiosError.response?.data?.error || axiosError.response?.data?.message;
+            console.log('Join room validation error:', errorMsg);
+            // Continue anyway to try getting the session - user might already be in the room
+          } else {
+            throw joinError;
+          }
+        }
 
         // Create/Get Cloudflare Session
         const session = await callsApi.createSession(roomId);
@@ -55,8 +79,13 @@ export default function RoomPage() {
 
         // Initialize Cloudflare RealtimeKit
         initMeeting({ authToken: cfToken });
-      } catch (error: unknown) {
+      } catch (error) {
         console.error('Error initializing room:', error);
+        const axiosError = error as AxiosError;
+        const errorMsg = axiosError.response?.status === 404 
+          ? 'Meeting not found. Please use a valid meeting ID.'
+          : 'Failed to join the meeting. Please try again.';
+        alert(errorMsg);
         router.push('/dashboard');
       }
     };
