@@ -4,7 +4,7 @@ import { LoginRequest, RegisterRequest } from '@/types/auth';
 import { useState } from 'react';
 
 export function useAuth() {
-  const { user, token, isAuthenticated, hasHydrated, setAuth, clearAuth } = useAuthStore();
+  const { user, token, isAuthenticated, hasHydrated, setAuth, clearAuth, initializeAuth } = useAuthStore();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -58,5 +58,6 @@ export function useAuth() {
     login,
     register,
     logout,
+    initializeAuth,
   };
 }
