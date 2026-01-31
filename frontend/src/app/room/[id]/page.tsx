@@ -5,7 +5,6 @@ import { useRouter, useParams } from 'next/navigation';
 import { useRealtimeKitClient, RealtimeKitProvider, useRealtimeKitMeeting } from '@cloudflare/realtimekit-react';
 import {
   RtkUiProvider,
-  RtkHeader,
   RtkGrid,
   RtkSidebar,
   RtkControlbar,
@@ -15,8 +14,6 @@ import {
   RtkSetupScreen,
   RtkEndedScreen,
   RtkWaitingScreen,
-  RtkChat,
-  RtkParticipantTile,
   RtkParticipantCount,
   RtkMeetingTitle,
   RtkRecordingIndicator,
@@ -25,9 +22,6 @@ import {
   RtkSpotlightGrid,
   RtkSimpleGrid,
   RtkMixedGrid,
-  RtkSettingsAudio,
-  RtkSettingsVideo,
-  RtkNameTag,
   RtkSpinner,
   RtkTooltip,
   RtkAudioVisualizer
@@ -173,12 +167,13 @@ function MeetingUI() {
             }} />
           </div>
 
-          {/* Control Bar */}
+          {/* Control Bar with built-in controls */}
           <RtkControlbar style={{
             display: 'flex',
             justifyContent: 'center',
             padding: '1rem',
-            backgroundColor: '#2d2d2d'
+            backgroundColor: '#2d2d2d',
+            borderTop: '1px solid #444'
           }} />
         </div>
       )}
