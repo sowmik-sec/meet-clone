@@ -1,9 +1,13 @@
 package user
 
 import (
+	"regexp"
 	"time"
+
 	"golang.org/x/crypto/bcrypt"
 )
+
+var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`)
 
 type User struct {
 	ID        string    `json:"id" bson:"_id"`
@@ -16,6 +20,21 @@ type User struct {
 }
 
 func NewUser(email, password, name string) (*User, error) {
+	// Validate email format
+	if !emailRegex.MatchString(email) {
+		return nil, ErrInvalidEmail
+	}
+
+	// Validate password strength (minimum 6 characters)
+	if len(password) < 6 {
+		return nil, ErrWeakPassword
+	}
+
+	// Validate name
+	if len(name) < 2 {
+		return nil, ErrInvalidName
+	}
+
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, err
@@ -39,4 +58,19 @@ func (u *User) ComparePassword(password string) bool {
 func generateDefaultAvatar(email string) string {
 	// Use a service like UI Avatars or Gravatar
 	return "https://ui-avatars.com/api/?name=" + email + "&background=random"
+}
+
+// Validation errors
+var (
+	ErrInvalidEmail = &ValidationError{Message: "invalid email format"}
+	ErrWeakPassword = &ValidationError{Message: "password must be at least 6 characters"}
+	ErrInvalidName  = &ValidationError{Message: "name must be at least 2 characters"}
+)
+
+type ValidationError struct {
+	Message string
+}
+
+func (e *ValidationError) Error() string {
+	return e.Message
 }
