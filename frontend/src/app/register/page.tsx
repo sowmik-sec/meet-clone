@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
@@ -12,12 +12,25 @@ import { Label } from '@/components/ui/label';
 export default function RegisterPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { register, isLoading, error } = useAuth();
+  const { register, isLoading, error, isAuthenticated, initializeAuth } = useAuth();
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     password: '',
   });
+
+  // Initialize auth from cookies on mount
+  useEffect(() => {
+    initializeAuth();
+  }, [initializeAuth]);
+
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      const redirectTo = searchParams.get('redirect') || '/dashboard';
+      router.push(redirectTo);
+    }
+  }, [isAuthenticated, router, searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

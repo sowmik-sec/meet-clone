@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useRealtimeKitClient, RealtimeKitProvider, useRealtimeKitMeeting } from '@cloudflare/realtimekit-react';
 import {
@@ -33,10 +33,28 @@ export default function RoomPage() {
   const params = useParams();
   const roomId = params.id as string;
 
-  const { user, isAuthenticated } = useAuthStore();
+  const { user, isAuthenticated, hasHydrated, initializeAuth } = useAuthStore();
   const [meeting, initMeeting] = useRealtimeKitClient();
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+
+  // Initialize auth from cookies on mount
+  useEffect(() => {
+    initializeAuth();
+  }, [initializeAuth]);
+
+  // Wait for auth store to hydrate before checking authentication
+  useEffect(() => {
+    if (hasHydrated) {
+      setIsCheckingAuth(false);
+    }
+  }, [hasHydrated]);
 
   useEffect(() => {
+    // Don't do anything until auth store has hydrated
+    if (isCheckingAuth) {
+      return;
+    }
+
     if (!isAuthenticated) {
       // Store the current room URL and redirect to login
       const currentPath = `/room/${roomId}`;
@@ -92,7 +110,19 @@ export default function RoomPage() {
 
     initRoom();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roomId, isAuthenticated]);
+  }, [roomId, isAuthenticated, isCheckingAuth]);
+
+  // Show loading while checking authentication
+  if (isCheckingAuth) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-gray-900">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-white mx-auto"></div>
+          <h2 className="text-2xl font-bold text-white mt-4">Loading...</h2>
+        </div>
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
     return null;

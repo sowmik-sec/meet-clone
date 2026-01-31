@@ -14,11 +14,16 @@ import { Separator } from '@/components/ui/separator';
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { user, isAuthenticated, hasHydrated, logout } = useAuth();
+  const { user, isAuthenticated, hasHydrated, logout, initializeAuth } = useAuth();
   const [roomId, setRoomId] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [activeRooms, setActiveRooms] = useState<Room[]>([]);
   const [isLoadingRooms, setIsLoadingRooms] = useState(true);
+
+  // Initialize auth from cookies on mount
+  useEffect(() => {
+    initializeAuth();
+  }, [initializeAuth]);
 
   useEffect(() => {
     if (hasHydrated && !isAuthenticated) {

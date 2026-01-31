@@ -12,11 +12,24 @@ import { Label } from '@/components/ui/label';
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { login, isLoading, error } = useAuth();
+  const { login, isLoading, error, isAuthenticated, initializeAuth } = useAuth();
   const [formData, setFormData] = useState({
     email: '',
     password: '',
   });
+
+  // Initialize auth from cookies on mount
+  useEffect(() => {
+    initializeAuth();
+  }, [initializeAuth]);
+
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      const redirectTo = searchParams.get('redirect') || '/dashboard';
+      router.push(redirectTo);
+    }
+  }, [isAuthenticated, router, searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
