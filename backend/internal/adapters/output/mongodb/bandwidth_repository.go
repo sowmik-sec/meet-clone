@@ -22,7 +22,16 @@ func NewBandwidthRepository(client *Client) bandwidth.Repository {
 }
 
 func (r *BandwidthRepository) Create(ctx context.Context, record *bandwidth.BandwidthRecord) error {
-	_, err := r.collection.InsertOne(ctx, record)
+	// Use upsert to handle potential race conditions with unique index
+	filter := bson.M{
+		"user_id":    record.UserID,
+		"room_id":    record.RoomID,
+		"session_id": record.SessionID,
+	}
+	update := bson.M{"$set": record}
+	opts := options.Update().SetUpsert(true)
+
+	_, err := r.collection.UpdateOne(ctx, filter, update, opts)
 	return err
 }
 
@@ -36,6 +45,8 @@ func (r *BandwidthRepository) Update(ctx context.Context, record *bandwidth.Band
 }
 
 func (r *BandwidthRepository) FindBySession(ctx context.Context, userID, roomID, sessionID string) (*bandwidth.BandwidthRecord, error) {
+	log.Printf("[BandwidthRepo] FindBySession: userID=%s, roomID=%s, sessionID=%s", userID, roomID, sessionID)
+
 	var record bandwidth.BandwidthRecord
 	err := r.collection.FindOne(ctx, bson.M{
 		"user_id":    userID,
@@ -45,11 +56,14 @@ func (r *BandwidthRepository) FindBySession(ctx context.Context, userID, roomID,
 
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
+			log.Printf("[BandwidthRepo] FindBySession: No existing record found for userID=%s", userID)
 			return nil, nil
 		}
+		log.Printf("[BandwidthRepo] FindBySession: Error: %v", err)
 		return nil, err
 	}
 
+	log.Printf("[BandwidthRepo] FindBySession: Found existing record ID=%s for userID=%s", record.ID, userID)
 	return &record, nil
 }
 

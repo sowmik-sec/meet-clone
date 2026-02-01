@@ -103,13 +103,18 @@ export function useBandwidthStats(roomId: string) {
                         }
                     });
 
-                    // Update latest stats for this PC
-                    pcStatsMapRef.current.set(pc, {
-                        bytesSent: pcBytesSent,
-                        bytesReceived: pcBytesReceived,
-                        packetsSent: pcPacketsSent,
-                        packetsLost: pcPacketsLost
-                    });
+                    // Get previous stats for this PC (if any)
+                    const prevStats = pcStatsMapRef.current.get(pc);
+
+                    // MONOTONIC: Keep maximum values to prevent drops when peers leave
+                    const newStats: BandwidthStats = {
+                        bytesSent: Math.max(pcBytesSent, prevStats?.bytesSent || 0),
+                        bytesReceived: Math.max(pcBytesReceived, prevStats?.bytesReceived || 0),
+                        packetsSent: Math.max(pcPacketsSent, prevStats?.packetsSent || 0),
+                        packetsLost: Math.max(pcPacketsLost, prevStats?.packetsLost || 0)
+                    };
+
+                    pcStatsMapRef.current.set(pc, newStats);
 
                 } catch (err) {
                     console.error('Error getting stats from a PC:', err);

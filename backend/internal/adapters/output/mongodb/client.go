@@ -83,5 +83,23 @@ func (c *Client) CreateIndexes(ctx context.Context) error {
 		return err
 	}
 
+	// Bandwidth usage indexes
+	bandwidthIndexes := []mongo.IndexModel{
+		{
+			Keys: bson.D{
+				{Key: "user_id", Value: 1},
+				{Key: "room_id", Value: 1},
+				{Key: "session_id", Value: 1},
+			},
+			Options: options.Index().SetUnique(true),
+		},
+		{
+			Keys: bson.D{{Key: "user_id", Value: 1}},
+		},
+	}
+	if _, err := c.db.Collection("bandwidth_usage").Indexes().CreateMany(ctx, bandwidthIndexes); err != nil {
+		return err
+	}
+
 	return nil
 }
