@@ -68,7 +68,7 @@ func main() {
 	logger.Info.Println("WebSocket hub started")
 
 	// Initialize handlers
-	authHandler := handlers.NewAuthHandler(userService, jwtService)
+	authHandler := handlers.NewAuthHandler(userService, jwtService, cfg)
 	roomHandler := handlers.NewRoomHandler(roomService)
 	chatHandler := handlers.NewChatHandler(chatService)
 	callsHandler := handlers.NewCallsHandler(callsService, roomService)

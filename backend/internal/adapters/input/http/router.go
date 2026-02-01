@@ -57,7 +57,7 @@ func (r *Router) Setup() http.Handler {
 	rateLimiter := middleware.NewRateLimiter(100, time.Minute)
 
 	// Apply global middleware
-	r.router.Use(middleware.SecurityHeaders)
+	r.router.Use(middleware.SecurityHeaders(r.config))
 	r.router.Use(middleware.RequestValidator)
 	r.router.Use(middleware.Logger)
 
@@ -69,6 +69,7 @@ func (r *Router) Setup() http.Handler {
 	auth.Use(rateLimiter.Limit) // Stricter rate limiting for auth endpoints
 	auth.HandleFunc("/register", r.authHandler.Register).Methods("POST")
 	auth.HandleFunc("/login", r.authHandler.Login).Methods("POST")
+	auth.HandleFunc("/logout", r.authHandler.Logout).Methods("POST")
 
 	// Protected routes - Auth
 	authProtected := auth.PathPrefix("").Subrouter()

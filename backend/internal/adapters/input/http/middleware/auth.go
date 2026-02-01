@@ -24,21 +24,26 @@ func NewAuthMiddleware(jwtService *jwt.JWTService) *AuthMiddleware {
 
 func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		authHeader := r.Header.Get("Authorization")
-
-		if authHeader == "" {
-			http.Error(w, "missing authorization header", http.StatusUnauthorized)
-			return
+		// Check for cookie first
+		cookie, err := r.Cookie("access_token")
+		var token string
+		if err == nil {
+			token = cookie.Value
+		} else {
+			// Fallback to Authorization header
+			authHeader := r.Header.Get("Authorization")
+			if authHeader != "" {
+				parts := strings.Split(authHeader, " ")
+				if len(parts) == 2 && parts[0] == "Bearer" {
+					token = parts[1]
+				}
+			}
 		}
 
-		// Extract token from "Bearer <token>"
-		parts := strings.Split(authHeader, " ")
-		if len(parts) != 2 || parts[0] != "Bearer" {
-			http.Error(w, "invalid authorization header format", http.StatusUnauthorized)
+		if token == "" {
+			http.Error(w, "missing authorization token", http.StatusUnauthorized)
 			return
 		}
-
-		token := parts[1]
 
 		claims, err := m.jwtService.ValidateToken(token)
 		if err != nil {

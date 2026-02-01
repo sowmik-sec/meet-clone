@@ -3,7 +3,9 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
+	"github.com/meet-clone/backend/internal/config"
 	"github.com/meet-clone/backend/internal/core/domain/user"
 	"github.com/meet-clone/backend/internal/pkg/errors"
 	"github.com/meet-clone/backend/internal/pkg/jwt"
@@ -12,12 +14,14 @@ import (
 type AuthHandler struct {
 	userService user.Service
 	jwtService  *jwt.JWTService
+	config      *config.Config
 }
 
-func NewAuthHandler(userService user.Service, jwtService *jwt.JWTService) *AuthHandler {
+func NewAuthHandler(userService user.Service, jwtService *jwt.JWTService, cfg *config.Config) *AuthHandler {
 	return &AuthHandler{
 		userService: userService,
 		jwtService:  jwtService,
+		config:      cfg,
 	}
 }
 
@@ -33,8 +37,7 @@ type LoginRequest struct {
 }
 
 type AuthResponse struct {
-	User  *user.User `json:"user"`
-	Token string     `json:"token"`
+	User *user.User `json:"user"`
 }
 
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
@@ -65,7 +68,17 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondJSON(w, AuthResponse{User: u, Token: token}, http.StatusCreated)
+	http.SetCookie(w, &http.Cookie{
+		Name:     "access_token",
+		Value:    token,
+		Expires:  time.Now().Add(24 * time.Hour), // 24 hours
+		HttpOnly: true,
+		Path:     "/",
+		Secure:   h.config.Environment == "production",
+		SameSite: http.SameSiteLaxMode,
+	})
+
+	respondJSON(w, AuthResponse{User: u}, http.StatusCreated)
 }
 
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
@@ -96,7 +109,17 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondJSON(w, AuthResponse{User: u, Token: token}, http.StatusOK)
+	http.SetCookie(w, &http.Cookie{
+		Name:     "access_token",
+		Value:    token,
+		Expires:  time.Now().Add(24 * time.Hour), // 24 hours
+		HttpOnly: true,
+		Path:     "/",
+		Secure:   h.config.Environment == "production",
+		SameSite: http.SameSiteLaxMode,
+	})
+
+	respondJSON(w, AuthResponse{User: u}, http.StatusOK)
 }
 
 func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
@@ -117,4 +140,17 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, u, http.StatusOK)
+}
+
+func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     "access_token",
+		Value:    "",
+		Expires:  time.Unix(0, 0),
+		HttpOnly: true,
+		Path:     "/",
+		SameSite: http.SameSiteLaxMode,
+	})
+
+	w.WriteHeader(http.StatusOK)
 }
