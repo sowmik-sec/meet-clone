@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/meet-clone/backend/internal/adapters/input/http/middleware"
 	"github.com/meet-clone/backend/internal/config"
 	"github.com/meet-clone/backend/internal/core/domain/user"
 	"github.com/meet-clone/backend/internal/pkg/errors"
@@ -123,7 +124,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
-	claims, ok := r.Context().Value("user").(*jwt.Claims)
+	claims, ok := middleware.GetUserFromContext(r.Context())
 	if !ok {
 		respondError(w, errors.NewUnauthorizedError("unauthorized"), http.StatusUnauthorized)
 		return

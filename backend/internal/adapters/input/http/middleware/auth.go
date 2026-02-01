@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"strings"
 
@@ -41,12 +42,14 @@ func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 		}
 
 		if token == "" {
+			log.Println("AuthMiddleware: Missing authorization token") // DEBUG
 			http.Error(w, "missing authorization token", http.StatusUnauthorized)
 			return
 		}
 
 		claims, err := m.jwtService.ValidateToken(token)
 		if err != nil {
+			log.Printf("AuthMiddleware: Token validation failed: %v", err) // DEBUG
 			http.Error(w, "invalid token", http.StatusUnauthorized)
 			return
 		}

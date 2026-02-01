@@ -65,6 +65,7 @@ export const useAuthStore = create<AuthState>()((set) => ({
         cookies.remove(USER_COOKIE_NAME);
         set({ user: null, isAuthenticated: false, hasHydrated: true });
       }
+    } else {
       set({ hasHydrated: true });
     }
 
