@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { HeaderAuthButtons } from '@/components/ui/HeaderAuthButtons';
 
 export default function Home() {
   return (
@@ -11,18 +12,7 @@ export default function Home() {
             <div className="flex items-center">
               <h1 className="text-2xl font-bold text-blue-600">Meet Clone</h1>
             </div>
-            <div className="flex gap-4">
-              <Link href="/login">
-                <Button variant="ghost">
-                  Login
-                </Button>
-              </Link>
-              <Link href="/register">
-                <Button>
-                  Get Started
-                </Button>
-              </Link>
-            </div>
+            <HeaderAuthButtons />
           </div>
         </div>
       </nav>
@@ -33,7 +23,7 @@ export default function Home() {
             Video Conferencing Made Simple
           </h1>
           <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
-            Connect with your team instantly. High-quality video calls with up to 10 participants, 
+            Connect with your team instantly. High-quality video calls with up to 10 participants,
             real-time chat, and easy sharing.
           </p>
           <div className="flex gap-4 justify-center">
