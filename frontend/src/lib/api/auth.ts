@@ -13,7 +13,12 @@ export const authApi = {
   },
 
   me: async (): Promise<User> => {
-    const response = await api.get<User>('/auth/me');
+    // @ts-ignore - Custom config property
+    const response = await api.get<User>('/auth/me', { skipRedirect: true } as any);
     return response.data;
+  },
+
+  logout: async (): Promise<void> => {
+    await api.post('/auth/logout');
   },
 };

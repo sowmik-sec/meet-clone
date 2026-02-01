@@ -4,7 +4,7 @@ import { LoginRequest, RegisterRequest } from '@/types/auth';
 import { useState } from 'react';
 
 export function useAuth() {
-  const { user, token, isAuthenticated, hasHydrated, setAuth, clearAuth, initializeAuth } = useAuthStore();
+  const { user, isAuthenticated, hasHydrated, setAuth, clearAuth, initializeAuth } = useAuthStore();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -13,7 +13,7 @@ export function useAuth() {
     setError(null);
     try {
       const response = await authApi.login(data);
-      setAuth(response.user, response.token);
+      setAuth(response.user);
       return response;
     } catch (error: unknown) {
       const message = error && typeof error === 'object' && 'response' in error
@@ -31,7 +31,7 @@ export function useAuth() {
     setError(null);
     try {
       const response = await authApi.register(data);
-      setAuth(response.user, response.token);
+      setAuth(response.user);
       return response;
     } catch (error: unknown) {
       const message = error && typeof error === 'object' && 'response' in error
@@ -44,13 +44,18 @@ export function useAuth() {
     }
   };
 
-  const logout = () => {
-    clearAuth();
+  const logout = async () => {
+    try {
+      await authApi.logout();
+    } catch (error) {
+      console.error('Logout failed', error);
+    } finally {
+      clearAuth();
+    }
   };
 
   return {
     user,
-    token,
     isAuthenticated,
     hasHydrated,
     isLoading,
