@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { EndMeetingModal } from '@/components/dashboard/EndMeetingModal';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -19,6 +20,8 @@ export default function DashboardPage() {
   const [isCreating, setIsCreating] = useState(false);
   const [activeRooms, setActiveRooms] = useState<Room[]>([]);
   const [isLoadingRooms, setIsLoadingRooms] = useState(true);
+  const [roomToEnd, setRoomToEnd] = useState<string | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
   // Initialize auth from cookies on mount
   useEffect(() => {
@@ -59,6 +62,26 @@ export default function DashboardPage() {
       console.error('Failed to create room:', err);
     } finally {
       setIsCreating(false);
+    }
+  };
+
+  const handleEndRoom = (roomId: string) => {
+    setRoomToEnd(roomId);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const confirmEndRoom = async () => {
+    if (!roomToEnd) return;
+
+    try {
+      await roomApi.endRoom(roomToEnd);
+      // Remove room from local state
+      setActiveRooms(prev => prev.filter(room => room.id !== roomToEnd));
+      setIsDeleteDialogOpen(false);
+      setRoomToEnd(null);
+    } catch (error) {
+      console.error('Failed to end room:', error);
+      alert('Failed to end meeting. Please try again.');
     }
   };
 
@@ -154,6 +177,17 @@ export default function DashboardPage() {
                         </Badge>
                       </div>
                     </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {user?.id === room.created_by && (
+                      <Button
+                        variant="destructive"
+                        onClick={() => handleEndRoom(room.id)}
+                        size="sm"
+                      >
+                        End
+                      </Button>
+                    )}
                     <Link href={`/room/${room.id}`}>
                       <Button>
                         Join
@@ -195,6 +229,12 @@ export default function DashboardPage() {
           </ul>
         </div>
       </main>
+
+      <EndMeetingModal
+        isOpen={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+        onConfirm={confirmEndRoom}
+      />
     </div>
   );
 }

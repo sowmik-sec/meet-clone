@@ -72,7 +72,7 @@ export default function RoomPage() {
           });
         } catch (joinError) {
           const axiosError = joinError as AxiosError<{ error?: string; message?: string }>;
-          
+
           // If join fails with 404, room doesn't exist
           if (axiosError.response?.status === 404) {
             console.error('Room not found.');
@@ -80,7 +80,7 @@ export default function RoomPage() {
             router.push('/dashboard');
             return;
           }
-          
+
           // If join fails with 400, user might already be in the room or room validation failed
           if (axiosError.response?.status === 400) {
             const errorMsg = axiosError.response?.data?.error || axiosError.response?.data?.message;
@@ -100,7 +100,7 @@ export default function RoomPage() {
       } catch (error) {
         console.error('Error initializing room:', error);
         const axiosError = error as AxiosError;
-        const errorMsg = axiosError.response?.status === 404 
+        const errorMsg = axiosError.response?.status === 404
           ? 'Meeting not found. Please use a valid meeting ID.'
           : 'Failed to join the meeting. Please try again.';
         alert(errorMsg);
@@ -109,6 +109,15 @@ export default function RoomPage() {
     };
 
     initRoom();
+
+    // Cleanup function when component unmounts
+    return () => {
+      if (isAuthenticated) {
+        roomApi.leaveRoom(roomId).catch(err => {
+          console.error('Failed to leave room on unmount:', err);
+        });
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId, isAuthenticated, isCheckingAuth]);
 
