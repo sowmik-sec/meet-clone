@@ -13,14 +13,15 @@ import (
 )
 
 type Router struct {
-	router         *mux.Router
-	authHandler    *httpHandlers.AuthHandler
-	roomHandler    *httpHandlers.RoomHandler
-	chatHandler    *httpHandlers.ChatHandler
-	callsHandler   *httpHandlers.CallsHandler
-	wsHandler      *websocket.Handler
-	authMiddleware *middleware.AuthMiddleware
-	config         *config.Config
+	router           *mux.Router
+	authHandler      *httpHandlers.AuthHandler
+	roomHandler      *httpHandlers.RoomHandler
+	chatHandler      *httpHandlers.ChatHandler
+	callsHandler     *httpHandlers.CallsHandler
+	bandwidthHandler *httpHandlers.BandwidthHandler
+	wsHandler        *websocket.Handler
+	authMiddleware   *middleware.AuthMiddleware
+	config           *config.Config
 }
 
 func NewRouter(
@@ -28,19 +29,21 @@ func NewRouter(
 	roomHandler *httpHandlers.RoomHandler,
 	chatHandler *httpHandlers.ChatHandler,
 	callsHandler *httpHandlers.CallsHandler,
+	bandwidthHandler *httpHandlers.BandwidthHandler,
 	wsHandler *websocket.Handler,
 	authMiddleware *middleware.AuthMiddleware,
 	cfg *config.Config,
 ) *Router {
 	return &Router{
-		router:         mux.NewRouter(),
-		authHandler:    authHandler,
-		roomHandler:    roomHandler,
-		chatHandler:    chatHandler,
-		callsHandler:   callsHandler,
-		wsHandler:      wsHandler,
-		authMiddleware: authMiddleware,
-		config:         cfg,
+		router:           mux.NewRouter(),
+		authHandler:      authHandler,
+		roomHandler:      roomHandler,
+		chatHandler:      chatHandler,
+		callsHandler:     callsHandler,
+		bandwidthHandler: bandwidthHandler,
+		wsHandler:        wsHandler,
+		authMiddleware:   authMiddleware,
+		config:           cfg,
 	}
 }
 
@@ -64,17 +67,16 @@ func (r *Router) Setup() http.Handler {
 	// API version prefix
 	api := r.router.PathPrefix("/api/v1").Subrouter()
 
-	// Public routes - Auth (with rate limiting to prevent brute force)
+	// Public routes - Auth (with rate limiting)
 	auth := api.PathPrefix("/auth").Subrouter()
-	auth.Use(rateLimiter.Limit) // Stricter rate limiting for auth endpoints
+	auth.Use(rateLimiter.Limit)
 	auth.HandleFunc("/register", r.authHandler.Register).Methods("POST")
 	auth.HandleFunc("/login", r.authHandler.Login).Methods("POST")
 	auth.HandleFunc("/logout", r.authHandler.Logout).Methods("POST")
 
 	// Protected routes - Auth
-	authProtected := auth.PathPrefix("").Subrouter()
-	authProtected.Use(r.authMiddleware.Authenticate)
-	authProtected.HandleFunc("/me", r.authHandler.Me).Methods("GET")
+	// We attach /me to the auth subrouter but wrap it with the auth middleware
+	auth.Handle("/me", r.authMiddleware.Authenticate(http.HandlerFunc(r.authHandler.Me))).Methods("GET")
 
 	// Protected routes - Rooms
 	rooms := api.PathPrefix("/rooms").Subrouter()
@@ -100,6 +102,13 @@ func (r *Router) Setup() http.Handler {
 	calls.Use(r.authMiddleware.Authenticate)
 	calls.HandleFunc("/sessions", r.callsHandler.CreateSession).Methods("POST")
 	calls.HandleFunc("/sessions/token", r.callsHandler.GenerateToken).Methods("POST")
+
+	// Protected routes - Bandwidth
+	bandwidth := api.PathPrefix("/bandwidth").Subrouter()
+	bandwidth.Use(r.authMiddleware.Authenticate)
+	bandwidth.HandleFunc("/report", r.bandwidthHandler.ReportBandwidth).Methods("POST")
+	bandwidth.HandleFunc("/stats", r.bandwidthHandler.GetStats).Methods("GET")
+	bandwidth.HandleFunc("/history", r.bandwidthHandler.GetHistory).Methods("GET")
 
 	// Health check
 	r.router.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {

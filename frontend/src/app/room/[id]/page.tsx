@@ -10,9 +10,15 @@ import { useAuthStore } from '@/store/authStore';
 import { roomApi } from '@/lib/api/room';
 import { callsApi } from '@/lib/api/calls';
 import { AxiosError } from 'axios';
+import { useBandwidthStats } from '@/hooks/useBandwidthStats';
 
 function MeetingUI() {
   const { meeting } = useRealtimeKitMeeting();
+  const params = useParams();
+  const roomId = params.id as string;
+
+  // Start collecting bandwidth stats
+  useBandwidthStats(roomId);
 
   if (!meeting) {
     return (

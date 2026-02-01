@@ -14,6 +14,7 @@ import (
 	"github.com/meet-clone/backend/internal/adapters/input/websocket"
 	"github.com/meet-clone/backend/internal/adapters/output/mongodb"
 	"github.com/meet-clone/backend/internal/config"
+	"github.com/meet-clone/backend/internal/core/domain/bandwidth"
 	"github.com/meet-clone/backend/internal/core/domain/chat"
 	"github.com/meet-clone/backend/internal/core/domain/room"
 	"github.com/meet-clone/backend/internal/core/domain/user"
@@ -50,11 +51,13 @@ func main() {
 	userRepo := mongodb.NewUserRepository(mongoClient)
 	roomRepo := mongodb.NewRoomRepository(mongoClient)
 	chatRepo := mongodb.NewChatRepository(mongoClient)
+	bandwidthRepo := mongodb.NewBandwidthRepository(mongoClient)
 
 	// Initialize services
 	userService := user.NewService(userRepo)
 	roomService := room.NewService(roomRepo)
 	chatService := chat.NewService(chatRepo)
+	bandwidthService := bandwidth.NewService(bandwidthRepo)
 
 	// Initialize JWT service
 	jwtService := jwt.NewJWTService(cfg.JWTSecret, cfg.JWTExpiry)
@@ -72,6 +75,7 @@ func main() {
 	roomHandler := handlers.NewRoomHandler(roomService)
 	chatHandler := handlers.NewChatHandler(chatService)
 	callsHandler := handlers.NewCallsHandler(callsService, roomService)
+	bandwidthHandler := handlers.NewBandwidthHandler(bandwidthService)
 	wsHandler := websocket.NewHandler(wsHub, jwtService)
 
 	// Initialize middleware
@@ -83,6 +87,7 @@ func main() {
 		roomHandler,
 		chatHandler,
 		callsHandler,
+		bandwidthHandler,
 		wsHandler,
 		authMiddleware,
 		cfg,

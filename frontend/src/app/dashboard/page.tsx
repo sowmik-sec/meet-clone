@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { EndMeetingModal } from '@/components/dashboard/EndMeetingModal';
 import { MeetingCreatedModal } from '@/components/dashboard/MeetingCreatedModal';
+import BandwidthStatsCard from '@/components/dashboard/BandwidthStatsCard';
 import { Copy, Check } from 'lucide-react';
 
 export default function DashboardPage() {
@@ -142,6 +143,9 @@ export default function DashboardPage() {
       </nav>
 
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+        <div className="mb-8">
+          <BandwidthStatsCard />
+        </div>
         <div className="grid md:grid-cols-2 gap-8">
           <Card>
             <CardHeader>
