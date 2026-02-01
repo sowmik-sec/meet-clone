@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 
 	"github.com/gorilla/mux"
@@ -163,11 +164,8 @@ func (h *RoomHandler) GetUserRooms(w http.ResponseWriter, r *http.Request) {
 
 	rooms, err := h.roomService.GetUserRooms(r.Context(), claims.UserID)
 	if err != nil {
-		if appErr, ok := err.(*errors.AppError); ok {
-			respondError(w, appErr, getStatusCode(appErr.Type))
-			return
-		}
-		respondError(w, errors.NewInternalError("failed to get user rooms", err), http.StatusInternalServerError)
+		log.Printf("Error getting user rooms: %v", err) // Log to stdout
+		http.Error(w, "internal server error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
