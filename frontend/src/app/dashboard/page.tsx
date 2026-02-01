@@ -12,6 +12,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { EndMeetingModal } from '@/components/dashboard/EndMeetingModal';
+import { MeetingCreatedModal } from '@/components/dashboard/MeetingCreatedModal';
+import { Copy, Check } from 'lucide-react';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -22,6 +24,9 @@ export default function DashboardPage() {
   const [isLoadingRooms, setIsLoadingRooms] = useState(true);
   const [roomToEnd, setRoomToEnd] = useState<string | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isMeetingCreatedModalOpen, setIsMeetingCreatedModalOpen] = useState(false);
+  const [createdRoomId, setCreatedRoomId] = useState('');
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Initialize auth from cookies on mount
   useEffect(() => {
@@ -57,7 +62,12 @@ export default function DashboardPage() {
     setIsCreating(true);
     try {
       const room = await roomApi.createRoom();
-      router.push(`/room/${room.id}`);
+      setCreatedRoomId(room.id);
+      setIsMeetingCreatedModalOpen(true);
+
+      // Refresh active rooms
+      const rooms = await roomApi.getUserRooms();
+      setActiveRooms(rooms);
     } catch (err) {
       console.error('Failed to create room:', err);
     } finally {
@@ -82,6 +92,25 @@ export default function DashboardPage() {
     } catch (error) {
       console.error('Failed to end room:', error);
       alert('Failed to end meeting. Please try again.');
+    }
+  };
+
+  const handleJoinCreatedRoom = () => {
+    if (createdRoomId) {
+      router.push(`/room/${createdRoomId}`);
+    }
+  };
+
+  const copyToClipboard = async (text: string, id: string) => {
+    try {
+      if (typeof window === 'undefined') return;
+
+      const fullLink = `${window.location.origin}/room/${text}`;
+      await navigator.clipboard.writeText(fullLink);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
     }
   };
 
@@ -177,22 +206,36 @@ export default function DashboardPage() {
                         </Badge>
                       </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {user?.id === room.created_by && (
+                    <div className="flex items-center gap-2">
                       <Button
-                        variant="destructive"
-                        onClick={() => handleEndRoom(room.id)}
-                        size="sm"
+                        variant="outline"
+                        size="icon"
+                        onClick={() => copyToClipboard(room.id, room.id)}
+                        title="Copy meeting link"
+                        className="mr-2"
                       >
-                        End
+                        {copiedId === room.id ? (
+                          <Check className="h-4 w-4 text-green-500" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
+                        <span className="sr-only">Copy link</span>
                       </Button>
-                    )}
-                    <Link href={`/room/${room.id}`}>
-                      <Button>
-                        Join
-                      </Button>
-                    </Link>
+                      {user?.id === room.created_by && (
+                        <Button
+                          variant="destructive"
+                          onClick={() => handleEndRoom(room.id)}
+                          size="sm"
+                        >
+                          End
+                        </Button>
+                      )}
+                      <Link href={`/room/${room.id}`}>
+                        <Button>
+                          Join
+                        </Button>
+                      </Link>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -234,6 +277,13 @@ export default function DashboardPage() {
         isOpen={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}
         onConfirm={confirmEndRoom}
+      />
+
+      <MeetingCreatedModal
+        isOpen={isMeetingCreatedModalOpen}
+        onOpenChange={setIsMeetingCreatedModalOpen}
+        roomId={createdRoomId}
+        onJoinMeeting={handleJoinCreatedRoom}
       />
     </div>
   );
