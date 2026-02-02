@@ -88,6 +88,8 @@ func (r *Router) Setup() http.Handler {
 	rooms.HandleFunc("/{id}/leave", r.roomHandler.LeaveRoom).Methods("POST")
 	rooms.HandleFunc("/{id}", r.roomHandler.EndRoom).Methods("DELETE")
 	rooms.HandleFunc("/{id}/participants", r.roomHandler.GetParticipants).Methods("GET")
+	rooms.HandleFunc("/{id}/approve/{userId}", r.roomHandler.ApproveParticipant).Methods("POST")
+	rooms.HandleFunc("/{id}/deny/{userId}", r.roomHandler.DenyParticipant).Methods("POST")
 
 	// Protected routes - Chat
 	chat := api.PathPrefix("/rooms/{id}/messages").Subrouter()

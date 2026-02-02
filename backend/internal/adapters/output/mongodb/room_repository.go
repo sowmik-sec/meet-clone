@@ -87,3 +87,12 @@ func (r *RoomRepository) FindByCreator(ctx context.Context, createdBy string) ([
 
 	return rooms, nil
 }
+
+func (r *RoomRepository) FindBySessionID(ctx context.Context, sessionID string) (*room.Room, error) {
+	var rm room.Room
+	err := r.collection.FindOne(ctx, bson.M{"cloudflare_session_id": sessionID}).Decode(&rm)
+	if err != nil {
+		return nil, err
+	}
+	return &rm, nil
+}

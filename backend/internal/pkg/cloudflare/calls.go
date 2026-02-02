@@ -78,6 +78,10 @@ func (s *CallsService) CreateSession(roomID string) (*CreateSessionResponse, err
 		"title": fmt.Sprintf("Room %s", roomID),
 	}
 
+	// Log the request body for debugging
+	reqJSON, _ := json.MarshalIndent(meetingReq, "", "  ")
+	log.Printf("[Cloudflare] Meeting Request Body: %s", string(reqJSON))
+
 	meetingBody, err := json.Marshal(meetingReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal meeting request: %w", err)
@@ -139,17 +143,26 @@ func maskSecret(secret string) string {
 }
 
 // GenerateToken generates a participant token by calling Cloudflare's API
-func (s *CallsService) GenerateToken(sessionID, participantID string) (*GenerateTokenResponse, error) {
+// isCreator determines if participant gets moderator preset (auto-admit) or participant preset (needs approval)
+func (s *CallsService) GenerateToken(sessionID, participantID string, isCreator bool) (*GenerateTokenResponse, error) {
 	// Call Cloudflare API to create participant and get auth token
 	participantURL := fmt.Sprintf("%s/accounts/%s/realtime/kit/%s/meetings/%s/participants",
 		s.baseURL, s.accountID, s.appID, sessionID)
 
-	log.Printf("[Cloudflare] Creating participant via API - URL: %s, ParticipantID: %s", participantURL, participantID)
+	log.Printf("[Cloudflare] Creating participant via API - URL: %s, ParticipantID: %s, IsCreator: %v", participantURL, participantID, isCreator)
+
+	// Assign preset based on creator status
+	// group_call_host: auto-admits to meeting, can approve others
+	// group_call_participant: requires approval from host
+	presetName := "group_call_participant"
+	if isCreator {
+		presetName = "group_call_host"
+	}
 
 	participantReq := map[string]interface{}{
 		"custom_participant_id": participantID,
 		"name":                  "Participant",
-		"preset_name":           "group_call_participant",
+		"preset_name":           presetName,
 	}
 
 	jsonData, err := json.Marshal(participantReq)

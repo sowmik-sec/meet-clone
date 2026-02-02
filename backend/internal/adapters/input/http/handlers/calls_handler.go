@@ -112,7 +112,26 @@ func (h *CallsHandler) GenerateToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := h.service.GenerateToken(req.SessionID, userID)
+	// Find the room associated with this session to check if user is creator
+	room, err := h.roomService.GetRoomBySessionID(r.Context(), req.SessionID)
+	if err != nil {
+		logger.Error.Printf("Failed to get room for session %s: %v", req.SessionID, err)
+		http.Error(w, "Failed to get room", http.StatusNotFound)
+		return
+	}
+
+	// Check if user is approved to join (creator or approved participant)
+	if !room.IsUserApproved(userID) {
+		logger.Info.Printf("User %s not approved for room %s, denying token", userID, room.ID)
+		http.Error(w, "You must be approved by the host to join this meeting", http.StatusForbidden)
+		return
+	}
+
+	// Check if user is the room creator
+	isCreator := room.CreatedBy == userID
+	logger.Info.Printf("Generating token for user %s (isCreator: %v) in room %s", userID, isCreator, room.ID)
+
+	token, err := h.service.GenerateToken(req.SessionID, userID, isCreator)
 	if err != nil {
 		logger.Error.Printf("Failed to generate token: %v", err)
 		http.Error(w, "Failed to generate token", http.StatusInternalServerError)

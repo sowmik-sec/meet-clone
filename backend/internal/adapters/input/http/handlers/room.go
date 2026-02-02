@@ -171,3 +171,51 @@ func (h *RoomHandler) GetUserRooms(w http.ResponseWriter, r *http.Request) {
 
 	respondJSON(w, rooms, http.StatusOK)
 }
+
+func (h *RoomHandler) ApproveParticipant(w http.ResponseWriter, r *http.Request) {
+	claims, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		respondError(w, errors.NewUnauthorizedError("unauthorized"), http.StatusUnauthorized)
+		return
+	}
+
+	vars := mux.Vars(r)
+	roomID := vars["id"]
+	userID := vars["userId"]
+
+	room, err := h.roomService.ApproveParticipant(r.Context(), roomID, claims.UserID, userID)
+	if err != nil {
+		if appErr, ok := err.(*errors.AppError); ok {
+			respondError(w, appErr, getStatusCode(appErr.Type))
+			return
+		}
+		respondError(w, errors.NewInternalError("failed to approve participant", err), http.StatusInternalServerError)
+		return
+	}
+
+	respondJSON(w, room, http.StatusOK)
+}
+
+func (h *RoomHandler) DenyParticipant(w http.ResponseWriter, r *http.Request) {
+	claims, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		respondError(w, errors.NewUnauthorizedError("unauthorized"), http.StatusUnauthorized)
+		return
+	}
+
+	vars := mux.Vars(r)
+	roomID := vars["id"]
+	userID := vars["userId"]
+
+	err := h.roomService.DenyParticipant(r.Context(), roomID, claims.UserID, userID)
+	if err != nil {
+		if appErr, ok := err.(*errors.AppError); ok {
+			respondError(w, appErr, getStatusCode(appErr.Type))
+			return
+		}
+		respondError(w, errors.NewInternalError("failed to deny participant", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}

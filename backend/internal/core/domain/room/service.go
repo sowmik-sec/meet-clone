@@ -15,6 +15,10 @@ type Service interface {
 	EndRoom(ctx context.Context, roomID, userID string) error
 	GetActiveParticipants(ctx context.Context, roomID string) ([]Participant, error)
 	SetSessionID(ctx context.Context, roomID, sessionID string) error
+	GetRoomBySessionID(ctx context.Context, sessionID string) (*Room, error)
+	RequestJoin(ctx context.Context, roomID, userID, userName, avatar string) (*Room, error)
+	ApproveParticipant(ctx context.Context, roomID, hostID, userID string) (*Room, error)
+	DenyParticipant(ctx context.Context, roomID, hostID, userID string) error
 }
 
 type service struct {
@@ -47,8 +51,21 @@ func (s *service) JoinRoom(ctx context.Context, roomID, userID, userName, avatar
 		return nil, errors.NewValidationError("room has ended")
 	}
 
-	if err := room.AddParticipant(userID, userName, avatar); err != nil {
-		return nil, errors.NewValidationError(err.Error())
+	// Creator joins directly
+	if room.CreatedBy == userID {
+		if err := room.AddParticipant(userID, userName, avatar); err != nil {
+			return nil, errors.NewValidationError(err.Error())
+		}
+		if err := s.repo.Update(ctx, room); err != nil {
+			return nil, errors.NewInternalError("failed to update room", err)
+		}
+		return room, nil
+	}
+
+	// Non-creator goes to waiting list
+	if err := room.AddToWaitingList(userID, userName, avatar); err != nil {
+		// If already in waiting list or room, return the room without error
+		return room, nil
 	}
 
 	if err := s.repo.Update(ctx, room); err != nil {
@@ -124,4 +141,61 @@ func (s *service) GetActiveParticipants(ctx context.Context, roomID string) ([]P
 	}
 
 	return room.GetActiveParticipants(), nil
+}
+
+func (s *service) GetRoomBySessionID(ctx context.Context, sessionID string) (*Room, error) {
+	room, err := s.repo.FindBySessionID(ctx, sessionID)
+	if err != nil {
+		return nil, errors.NewNotFoundError("room not found")
+	}
+
+	return room, nil
+}
+
+func (s *service) RequestJoin(ctx context.Context, roomID, userID, userName, avatar string) (*Room, error) {
+	return s.JoinRoom(ctx, roomID, userID, userName, avatar)
+}
+
+func (s *service) ApproveParticipant(ctx context.Context, roomID, hostID, userID string) (*Room, error) {
+	room, err := s.repo.FindByID(ctx, roomID)
+	if err != nil {
+		return nil, errors.NewNotFoundError("room not found")
+	}
+
+	// Only room creator can approve
+	if room.CreatedBy != hostID {
+		return nil, errors.NewForbiddenError("only room creator can approve participants")
+	}
+
+	if err := room.ApproveParticipant(userID); err != nil {
+		return nil, errors.NewValidationError(err.Error())
+	}
+
+	if err := s.repo.Update(ctx, room); err != nil {
+		return nil, errors.NewInternalError("failed to update room", err)
+	}
+
+	return room, nil
+}
+
+func (s *service) DenyParticipant(ctx context.Context, roomID, hostID, userID string) error {
+	room, err := s.repo.FindByID(ctx, roomID)
+	if err != nil {
+		return errors.NewNotFoundError("room not found")
+	}
+
+	// Only room creator can deny
+	if room.CreatedBy != hostID {
+		return errors.NewForbiddenError("only room creator can deny participants")
+	}
+
+	if err := room.DenyParticipant(userID); err != nil {
+		return errors.NewValidationError(err.Error())
+	}
+
+	if err := s.repo.Update(ctx, room); err != nil {
+		return errors.NewInternalError("failed to update room", err)
+	}
+
+	return nil
 }

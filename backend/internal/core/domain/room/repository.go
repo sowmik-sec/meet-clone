@@ -9,4 +9,5 @@ type Repository interface {
 	Update(ctx context.Context, room *Room) error
 	Delete(ctx context.Context, id string) error
 	FindActiveRooms(ctx context.Context, limit, offset int) ([]*Room, error)
+	FindBySessionID(ctx context.Context, sessionID string) (*Room, error)
 }
