@@ -11,6 +11,7 @@ import { roomApi } from '@/lib/api/room';
 import { callsApi } from '@/lib/api/calls';
 import { AxiosError } from 'axios';
 import { useBandwidthStats } from '@/hooks/useBandwidthStats';
+import { WaitingParticipant } from '@/types/room';
 
 function MeetingUI() {
   const { meeting } = useRealtimeKitMeeting();
@@ -42,6 +43,10 @@ export default function RoomPage() {
   const { user, isAuthenticated, hasHydrated, initializeAuth } = useAuthStore();
   const [meeting, initMeeting] = useRealtimeKitClient();
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [isWaiting, setIsWaiting] = useState(false);
+  const [isCreator, setIsCreator] = useState(false);
+  const [waitingParticipants, setWaitingParticipants] = useState<WaitingParticipant[]>([]);
+  const [approvalPollInterval, setApprovalPollInterval] = useState<NodeJS.Timeout | null>(null);
 
   // Initialize auth from cookies on mount
   useEffect(() => {
@@ -71,11 +76,13 @@ export default function RoomPage() {
     const initRoom = async () => {
       try {
         // Try to join the room
+        let roomData;
         try {
-          await roomApi.joinRoom(roomId, {
+          roomData = await roomApi.joinRoom(roomId, {
             user_name: user?.name || 'Anonymous User',
             avatar: user?.avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + (user?.email || 'default'),
           });
+          setIsCreator(roomData.created_by === user?.id);
         } catch (joinError) {
           const axiosError = joinError as AxiosError<{ error?: string; message?: string }>;
 
@@ -91,7 +98,6 @@ export default function RoomPage() {
           if (axiosError.response?.status === 400) {
             const errorMsg = axiosError.response?.data?.error || axiosError.response?.data?.message;
             console.log('Join room validation error:', errorMsg);
-            // Continue anyway to try getting the session - user might already be in the room
           } else {
             throw joinError;
           }
@@ -99,10 +105,36 @@ export default function RoomPage() {
 
         // Create/Get Cloudflare Session
         const session = await callsApi.createSession(roomId);
-        const { token: cfToken } = await callsApi.generateToken(session.sessionId);
-
-        // Initialize Cloudflare RealtimeKit
-        initMeeting({ authToken: cfToken });
+        
+        // Try to get token (may fail if not approved)
+        try {
+          const { token: cfToken } = await callsApi.generateToken(session.sessionId);
+          // Initialize Cloudflare RealtimeKit
+          initMeeting({ authToken: cfToken });
+        } catch (tokenError) {
+          const axiosError = tokenError as AxiosError<{ error?: string }>;
+          
+          // 403 means waiting for approval
+          if (axiosError.response?.status === 403) {
+            setIsWaiting(true);
+            // Start polling for approval
+            const pollInterval = setInterval(async () => {
+              try {
+                const { token: cfToken } = await callsApi.generateToken(session.sessionId);
+                clearInterval(pollInterval);
+                setApprovalPollInterval(null);
+                setIsWaiting(false);
+                initMeeting({ authToken: cfToken });
+              } catch (e) {
+                // Still waiting, continue polling
+              }
+            }, 2000);
+            
+            setApprovalPollInterval(pollInterval);
+          } else {
+            throw tokenError;
+          }
+        }
       } catch (error) {
         console.error('Error initializing room:', error);
         const axiosError = error as AxiosError;
@@ -116,8 +148,24 @@ export default function RoomPage() {
 
     initRoom();
 
+    // Poll for waiting participants if creator
+    const waitingPollInterval = setInterval(async () => {
+      try {
+        const roomData = await roomApi.getRoom(roomId);
+        if (roomData.created_by === user?.id) {
+          setWaitingParticipants(roomData.waiting_participants || []);
+        }
+      } catch (err) {
+        console.error('Failed to fetch waiting participants:', err);
+      }
+    }, 2000);
+
     // Cleanup function when component unmounts
     return () => {
+      if (approvalPollInterval) {
+        clearInterval(approvalPollInterval);
+      }
+      clearInterval(waitingPollInterval);
       if (isAuthenticated) {
         roomApi.leaveRoom(roomId).catch(err => {
           console.error('Failed to leave room on unmount:', err);
@@ -143,9 +191,77 @@ export default function RoomPage() {
     return null;
   }
 
+  const handleApprove = async (userId: string) => {
+    try {
+      await roomApi.approveParticipant(roomId, userId);
+      setWaitingParticipants(prev => prev.filter(p => p.user_id !== userId));
+    } catch (error) {
+      console.error('Failed to approve participant:', error);
+    }
+  };
+
+  const handleDeny = async (userId: string) => {
+    try {
+      await roomApi.denyParticipant(roomId, userId);
+      setWaitingParticipants(prev => prev.filter(p => p.user_id !== userId));
+    } catch (error) {
+      console.error('Failed to deny participant:', error);
+    }
+  };
+
+  // Show waiting screen if not approved
+  if (isWaiting) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-gray-900">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-white mx-auto mb-4"></div>
+          <h2 className="text-2xl font-bold text-white">Waiting for host approval...</h2>
+          <p className="text-gray-400 mt-2">The host will let you in soon</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <RealtimeKitProvider value={meeting}>
-      <MeetingUI />
-    </RealtimeKitProvider>
+    <>
+      <RealtimeKitProvider value={meeting}>
+        <MeetingUI />
+      </RealtimeKitProvider>
+      
+      {/* Waiting participants panel for creator */}
+      {isCreator && waitingParticipants.length > 0 && (
+        <div className="fixed bottom-4 right-4 bg-gray-800 rounded-lg shadow-lg p-4 w-80 max-h-96 overflow-y-auto z-50">
+          <h3 className="text-white font-bold mb-3">Waiting Room ({waitingParticipants.length})</h3>
+          <div className="space-y-2">
+            {waitingParticipants.map((participant) => (
+              <div key={participant.user_id} className="flex items-center justify-between bg-gray-700 p-3 rounded">
+                <div className="flex items-center gap-2">
+                  <img 
+                    src={participant.avatar} 
+                    alt={participant.name}
+                    className="w-8 h-8 rounded-full"
+                  />
+                  <span className="text-white text-sm">{participant.name}</span>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleApprove(participant.user_id)}
+                    className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm"
+                  >
+                    Admit
+                  </button>
+                  <button
+                    onClick={() => handleDeny(participant.user_id)}
+                    className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm"
+                  >
+                    Deny
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </>
   );
 }

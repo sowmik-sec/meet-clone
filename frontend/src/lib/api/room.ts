@@ -35,4 +35,13 @@ export const roomApi = {
     const response = await api.get<Room[]>('/rooms/my-rooms');
     return response.data;
   },
+
+  approveParticipant: async (roomId: string, userId: string): Promise<Room> => {
+    const response = await api.post<Room>(`/rooms/${roomId}/approve/${userId}`);
+    return response.data;
+  },
+
+  denyParticipant: async (roomId: string, userId: string): Promise<void> => {
+    await api.post(`/rooms/${roomId}/deny/${userId}`);
+  },
 };
