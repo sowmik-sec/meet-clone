@@ -126,7 +126,23 @@ export default function RoomPage() {
                 setIsWaiting(false);
                 initMeeting({ authToken: cfToken });
               } catch (e) {
-                // Still waiting, continue polling
+                // Still getting 403, check if we were denied
+                // Get room data to see if we're still in waiting list
+                try {
+                  const roomData = await roomApi.getRoom(roomId);
+                  const isInWaiting = roomData.waiting_participants?.some(p => p.user_id === user?.id);
+                  const isParticipant = roomData.participants?.some(p => p.user_id === user?.id && !p.left_at);
+                  
+                  // If not in waiting list and not a participant, we were denied
+                  if (!isInWaiting && !isParticipant) {
+                    clearInterval(pollInterval);
+                    setApprovalPollInterval(null);
+                    alert('The host denied your request to join this meeting.');
+                    router.push('/dashboard');
+                  }
+                } catch (roomError) {
+                  console.error('Failed to check room status:', roomError);
+                }
               }
             }, 2000);
             
