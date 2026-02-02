@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
+import { Activity } from 'lucide-react';
 import { bandwidthApi, UserBandwidthStats } from '@/lib/api/bandwidth';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 export default function BandwidthStatsCard() {
     const [stats, setStats] = useState<UserBandwidthStats | null>(null);
@@ -37,48 +39,59 @@ export default function BandwidthStatsCard() {
 
     if (loading) {
         return (
-            <div className="bg-gray-800 rounded-lg p-6 animate-pulse">
-                <div className="h-4 bg-gray-700 rounded w-1/4 mb-4"></div>
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="h-20 bg-gray-700 rounded"></div>
-                    <div className="h-20 bg-gray-700 rounded"></div>
-                </div>
-            </div>
+            <Card className="bg-gray-800 border-gray-700 animate-pulse">
+                <CardContent className="p-6">
+                    <div className="h-4 bg-gray-700 rounded w-1/4 mb-4"></div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="h-20 bg-gray-700 rounded"></div>
+                        <div className="h-20 bg-gray-700 rounded"></div>
+                    </div>
+                </CardContent>
+            </Card>
         );
     }
 
     if (!stats) return null;
 
     return (
-        <div className="bg-gray-800 rounded-lg p-6 border border-gray-700 shadow-lg">
-            <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-                Bandwidth Usage
-            </h3>
+        <Card className="border-gray-700 bg-gray-800 shadow-lg">
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-xl font-bold text-white">
+                    <Activity className="h-6 w-6 text-blue-400" />
+                    Bandwidth Usage
+                </CardTitle>
+            </CardHeader>
+            <CardContent>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <Card className="bg-gray-700/50 border-none">
+                        <CardContent className="p-4">
+                            <p className="mb-1 text-sm text-gray-400">Data Sent</p>
+                            <p className="text-2xl font-bold text-green-400">{formatBytes(stats.total_bytes_sent)}</p>
+                        </CardContent>
+                    </Card>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-gray-700/50 rounded-lg p-4">
-                    <p className="text-gray-400 text-sm mb-1">Data Sent</p>
-                    <p className="text-2xl font-bold text-green-400">{formatBytes(stats.total_bytes_sent)}</p>
-                </div>
+                    <Card className="bg-gray-700/50 border-none">
+                        <CardContent className="p-4">
+                            <p className="mb-1 text-sm text-gray-400">Data Received</p>
+                            <p className="text-2xl font-bold text-blue-400">{formatBytes(stats.total_bytes_received)}</p>
+                        </CardContent>
+                    </Card>
 
-                <div className="bg-gray-700/50 rounded-lg p-4">
-                    <p className="text-gray-400 text-sm mb-1">Data Received</p>
-                    <p className="text-2xl font-bold text-blue-400">{formatBytes(stats.total_bytes_received)}</p>
-                </div>
+                    <Card className="bg-gray-700/50 border-none">
+                        <CardContent className="p-4">
+                            <p className="mb-1 text-sm text-gray-400">Total Meeting Time</p>
+                            <p className="text-2xl font-bold text-white">{formatDuration(stats.total_duration)}</p>
+                        </CardContent>
+                    </Card>
 
-                <div className="bg-gray-700/50 rounded-lg p-4">
-                    <p className="text-gray-400 text-sm mb-1">Total Meeting Time</p>
-                    <p className="text-2xl font-bold text-white">{formatDuration(stats.total_duration)}</p>
+                    <Card className="bg-gray-700/50 border-none">
+                        <CardContent className="p-4">
+                            <p className="mb-1 text-sm text-gray-400">Meetings Joined</p>
+                            <p className="text-2xl font-bold text-purple-400">{stats.meeting_count}</p>
+                        </CardContent>
+                    </Card>
                 </div>
-
-                <div className="bg-gray-700/50 rounded-lg p-4">
-                    <p className="text-gray-400 text-sm mb-1">Meetings Joined</p>
-                    <p className="text-2xl font-bold text-purple-400">{stats.meeting_count}</p>
-                </div>
-            </div>
-        </div>
+            </CardContent>
+        </Card>
     );
 }

@@ -3,6 +3,9 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useRealtimeKitClient, RealtimeKitProvider, useRealtimeKitMeeting } from '@cloudflare/realtimekit-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import {
   RtkMeeting
 } from '@cloudflare/realtimekit-react-ui';
@@ -105,7 +108,7 @@ export default function RoomPage() {
 
         // Create/Get Cloudflare Session
         const session = await callsApi.createSession(roomId);
-        
+
         // Try to get token (may fail if not approved)
         try {
           const { token: cfToken } = await callsApi.generateToken(session.sessionId);
@@ -113,7 +116,7 @@ export default function RoomPage() {
           initMeeting({ authToken: cfToken });
         } catch (tokenError) {
           const axiosError = tokenError as AxiosError<{ error?: string }>;
-          
+
           // 403 means waiting for approval
           if (axiosError.response?.status === 403) {
             setIsWaiting(true);
@@ -132,7 +135,7 @@ export default function RoomPage() {
                   const roomData = await roomApi.getRoom(roomId);
                   const isInWaiting = roomData.waiting_participants?.some(p => p.user_id === user?.id);
                   const isParticipant = roomData.participants?.some(p => p.user_id === user?.id && !p.left_at);
-                  
+
                   // If not in waiting list and not a participant, we were denied
                   if (!isInWaiting && !isParticipant) {
                     clearInterval(pollInterval);
@@ -145,7 +148,7 @@ export default function RoomPage() {
                 }
               }
             }, 2000);
-            
+
             setApprovalPollInterval(pollInterval);
           } else {
             throw tokenError;
@@ -243,40 +246,44 @@ export default function RoomPage() {
       <RealtimeKitProvider value={meeting}>
         <MeetingUI />
       </RealtimeKitProvider>
-      
+
       {/* Waiting participants panel for creator */}
       {isCreator && waitingParticipants.length > 0 && (
-        <div className="fixed bottom-4 right-4 bg-gray-800 rounded-lg shadow-lg p-4 w-80 max-h-96 overflow-y-auto z-50">
-          <h3 className="text-white font-bold mb-3">Waiting Room ({waitingParticipants.length})</h3>
-          <div className="space-y-2">
+        <Card className="fixed bottom-4 right-4 w-80 max-h-96 overflow-y-auto z-50 bg-gray-800 border-gray-700 shadow-xl">
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="text-white text-lg font-bold">Waiting Room ({waitingParticipants.length})</CardTitle>
+          </CardHeader>
+          <CardContent className="p-4 pt-2 space-y-2">
             {waitingParticipants.map((participant) => (
-              <div key={participant.user_id} className="flex items-center justify-between bg-gray-700 p-3 rounded">
-                <div className="flex items-center gap-2">
-                  <img 
-                    src={participant.avatar} 
-                    alt={participant.name}
-                    className="w-8 h-8 rounded-full"
-                  />
-                  <span className="text-white text-sm">{participant.name}</span>
+              <div key={participant.user_id} className="flex items-center justify-between bg-gray-700 p-3 rounded-lg">
+                <div className="flex items-center gap-3">
+                  <Avatar className="h-8 w-8">
+                    <AvatarImage src={participant.avatar} alt={participant.name} />
+                    <AvatarFallback>{participant.name.charAt(0)}</AvatarFallback>
+                  </Avatar>
+                  <span className="text-white text-sm font-medium">{participant.name}</span>
                 </div>
                 <div className="flex gap-2">
-                  <button
+                  <Button
                     onClick={() => handleApprove(participant.user_id)}
-                    className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm"
+                    size="sm"
+                    className="h-8 px-2 bg-green-600 hover:bg-green-700 text-white"
                   >
                     Admit
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     onClick={() => handleDeny(participant.user_id)}
-                    className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm"
+                    size="sm"
+                    variant="destructive"
+                    className="h-8 px-2"
                   >
                     Deny
-                  </button>
+                  </Button>
                 </div>
               </div>
             ))}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       )}
     </>
   );
