@@ -44,6 +44,10 @@ func (c *Client) GetCollection(name string) *mongo.Collection {
 	return c.db.Collection(name)
 }
 
+func (c *Client) Database() *mongo.Database {
+	return c.db
+}
+
 func (c *Client) Disconnect(ctx context.Context) error {
 	return c.client.Disconnect(ctx)
 }

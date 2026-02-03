@@ -8,21 +8,24 @@ import (
 	"github.com/meet-clone/backend/internal/adapters/input/http/middleware"
 	"github.com/meet-clone/backend/internal/config"
 	"github.com/meet-clone/backend/internal/core/domain/user"
+	"github.com/meet-clone/backend/internal/pkg/calendar"
 	"github.com/meet-clone/backend/internal/pkg/errors"
 	"github.com/meet-clone/backend/internal/pkg/jwt"
 )
 
 type AuthHandler struct {
-	userService user.Service
-	jwtService  *jwt.JWTService
-	config      *config.Config
+	userService   user.Service
+	jwtService    *jwt.JWTService
+	config        *config.Config
+	googleService calendar.Service
 }
 
-func NewAuthHandler(userService user.Service, jwtService *jwt.JWTService, cfg *config.Config) *AuthHandler {
+func NewAuthHandler(userService user.Service, jwtService *jwt.JWTService, cfg *config.Config, googleService calendar.Service) *AuthHandler {
 	return &AuthHandler{
-		userService: userService,
-		jwtService:  jwtService,
-		config:      cfg,
+		userService:   userService,
+		jwtService:    jwtService,
+		config:        cfg,
+		googleService: googleService,
 	}
 }
 
@@ -154,4 +157,42 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	})
 
 	w.WriteHeader(http.StatusOK)
+}
+
+func (h *AuthHandler) GoogleLogin(w http.ResponseWriter, r *http.Request) {
+	url := h.googleService.GetAuthURL()
+	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
+}
+
+func (h *AuthHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
+	code := r.URL.Query().Get("code")
+	if code == "" {
+		respondError(w, errors.NewBadRequestError("code is required", nil), http.StatusBadRequest)
+		return
+	}
+
+	token, err := h.googleService.ExchangeToken(r.Context(), code)
+	if err != nil {
+		respondError(w, errors.NewInternalError("failed to exchange token", err), http.StatusInternalServerError)
+		return
+	}
+
+	claims, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		// If unauthenticated, we can't link account.
+		// For "Sync Calendar", user MUST be logged in.
+		// If implementation supports "Login with Google", logic is different.
+		// Assuming "Sync" use case here as per requirement.
+		respondError(w, errors.NewUnauthorizedError("must be logged in to sync calendar"), http.StatusUnauthorized)
+		return
+	}
+
+	err = h.userService.UpdateGoogleToken(r.Context(), claims.UserID, token.AccessToken, token.RefreshToken, token.Expiry)
+	if err != nil {
+		respondError(w, errors.NewInternalError("failed to update user token", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Redirect back to settings or dashboard
+	http.Redirect(w, r, h.config.CORSOrigin+"/dashboard?google_linked=true", http.StatusTemporaryRedirect)
 }

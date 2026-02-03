@@ -69,3 +69,11 @@ func NewForbiddenError(message string) *AppError {
 		Message: message,
 	}
 }
+
+func NewBadRequestError(message string, err error) *AppError {
+	return &AppError{
+		Type:    ErrorTypeValidation, // Map to validation/bad request
+		Message: message,
+		Err:     err,
+	}
+}

@@ -10,13 +10,16 @@ import (
 var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`)
 
 type User struct {
-	ID        string    `json:"id" bson:"_id"`
-	Email     string    `json:"email" bson:"email"`
-	Password  string    `json:"-" bson:"password"`
-	Name      string    `json:"name" bson:"name"`
-	Avatar    string    `json:"avatar" bson:"avatar"`
-	CreatedAt time.Time `json:"created_at" bson:"created_at"`
-	UpdatedAt time.Time `json:"updated_at" bson:"updated_at"`
+	ID                 string    `json:"id" bson:"_id"`
+	Email              string    `json:"email" bson:"email"`
+	Password           string    `json:"-" bson:"password"`
+	Name               string    `json:"name" bson:"name"`
+	Avatar             string    `json:"avatar" bson:"avatar"`
+	GoogleAccessToken  string    `json:"-" bson:"google_access_token,omitempty"`
+	GoogleRefreshToken string    `json:"-" bson:"google_refresh_token,omitempty"`
+	GoogleTokenExpiry  time.Time `json:"-" bson:"google_token_expiry,omitempty"`
+	CreatedAt          time.Time `json:"created_at" bson:"created_at"`
+	UpdatedAt          time.Time `json:"updated_at" bson:"updated_at"`
 }
 
 func NewUser(email, password, name string) (*User, error) {
