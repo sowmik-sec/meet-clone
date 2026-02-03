@@ -16,6 +16,7 @@ export interface WaitingParticipant {
 export interface Room {
   id: string;
   created_by: string;
+  room_type: 'meeting' | 'webinar';
   status: 'active' | 'ended';
   participants: Participant[];
   waiting_participants: WaitingParticipant[];
@@ -27,4 +28,8 @@ export interface Room {
 export interface JoinRoomRequest {
   user_name: string;
   avatar: string;
+}
+
+export interface CreateRoomRequest {
+  room_type?: 'meeting' | 'webinar';
 }

@@ -21,6 +21,7 @@ export default function DashboardPage() {
   const { user, isAuthenticated, hasHydrated, logout, initializeAuth } = useAuth();
   const [roomId, setRoomId] = useState('');
   const [isCreating, setIsCreating] = useState(false);
+  const [selectedRoomType, setSelectedRoomType] = useState<'meeting' | 'webinar'>('meeting');
   const [activeRooms, setActiveRooms] = useState<Room[]>([]);
   const [isLoadingRooms, setIsLoadingRooms] = useState(true);
   const [roomToEnd, setRoomToEnd] = useState<string | null>(null);
@@ -62,7 +63,7 @@ export default function DashboardPage() {
   const handleCreateRoom = async () => {
     setIsCreating(true);
     try {
-      const room = await roomApi.createRoom();
+      const room = await roomApi.createRoom(selectedRoomType);
       setCreatedRoomId(room.id);
       setIsMeetingCreatedModalOpen(true);
 
@@ -149,18 +150,39 @@ export default function DashboardPage() {
         <div className="grid md:grid-cols-2 gap-8">
           <Card>
             <CardHeader>
-              <CardTitle>Create New Meeting</CardTitle>
+              <CardTitle>Create New Session</CardTitle>
               <CardDescription>
-                Start a new meeting and invite participants
+                Start a new meeting or webinar and invite participants
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
+              <div className="flex gap-2">
+                <Button
+                  variant={selectedRoomType === 'meeting' ? 'default' : 'outline'}
+                  onClick={() => setSelectedRoomType('meeting')}
+                  className="flex-1"
+                >
+                  Meeting
+                </Button>
+                <Button
+                  variant={selectedRoomType === 'webinar' ? 'default' : 'outline'}
+                  onClick={() => setSelectedRoomType('webinar')}
+                  className="flex-1"
+                >
+                  Webinar
+                </Button>
+              </div>
+              <p className="text-sm text-gray-500">
+                {selectedRoomType === 'meeting'
+                  ? 'All participants can share audio/video'
+                  : 'Presenters broadcast to viewers'}
+              </p>
               <Button
                 className="w-full"
                 onClick={handleCreateRoom}
                 disabled={isCreating}
               >
-                {isCreating ? 'Creating...' : 'New Meeting'}
+                {isCreating ? 'Creating...' : `New ${selectedRoomType === 'meeting' ? 'Meeting' : 'Webinar'}`}
               </Button>
             </CardContent>
           </Card>

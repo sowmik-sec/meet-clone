@@ -2,8 +2,8 @@ import api from './client';
 import { Room, JoinRoomRequest, Participant } from '@/types/room';
 
 export const roomApi = {
-  createRoom: async (): Promise<Room> => {
-    const response = await api.post<Room>('/rooms');
+  createRoom: async (roomType: 'meeting' | 'webinar' = 'meeting'): Promise<Room> => {
+    const response = await api.post<Room>('/rooms', { room_type: roomType });
     return response.data;
   },
 
