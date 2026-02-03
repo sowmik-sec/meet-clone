@@ -14,11 +14,15 @@ import (
 	"github.com/meet-clone/backend/internal/adapters/input/websocket"
 	"github.com/meet-clone/backend/internal/adapters/output/mongodb"
 	"github.com/meet-clone/backend/internal/config"
+	"github.com/meet-clone/backend/internal/core/domain/appointment"
+	"github.com/meet-clone/backend/internal/core/domain/availability"
 	"github.com/meet-clone/backend/internal/core/domain/bandwidth"
 	"github.com/meet-clone/backend/internal/core/domain/chat"
 	"github.com/meet-clone/backend/internal/core/domain/room"
 	"github.com/meet-clone/backend/internal/core/domain/user"
+	"github.com/meet-clone/backend/internal/pkg/calendar"
 	"github.com/meet-clone/backend/internal/pkg/cloudflare"
+	"github.com/meet-clone/backend/internal/pkg/email"
 	"github.com/meet-clone/backend/internal/pkg/jwt"
 	"github.com/meet-clone/backend/internal/pkg/logger"
 )
@@ -52,12 +56,26 @@ func main() {
 	roomRepo := mongodb.NewRoomRepository(mongoClient)
 	chatRepo := mongodb.NewChatRepository(mongoClient)
 	bandwidthRepo := mongodb.NewBandwidthRepository(mongoClient)
+	appointmentRepo := mongodb.NewAppointmentRepository(mongoClient.Database())
+	availabilityRepo := mongodb.NewAvailabilityRepository(mongoClient.Database())
+
+	// Initialize Email service
+	emailService := email.NewResendService(os.Getenv("RESEND_API_KEY"), "onboarding@resend.dev")
+
+	// Initialize Google Calendar service
+	googleService := calendar.NewGoogleService(
+		os.Getenv("GOOGLE_CLIENT_ID"),
+		os.Getenv("GOOGLE_CLIENT_SECRET"),
+		os.Getenv("GOOGLE_REDIRECT_URL"), // e.g. http://localhost:8080/api/v1/auth/google/callback
+	)
 
 	// Initialize services
 	userService := user.NewService(userRepo)
 	roomService := room.NewService(roomRepo)
 	chatService := chat.NewService(chatRepo)
 	bandwidthService := bandwidth.NewService(bandwidthRepo)
+	appointmentService := appointment.NewService(appointmentRepo, roomService, emailService)
+	availabilityService := availability.NewService(availabilityRepo)
 
 	// Initialize JWT service
 	jwtService := jwt.NewJWTService(cfg.JWTSecret, cfg.JWTExpiry)
@@ -71,11 +89,13 @@ func main() {
 	logger.Info.Println("WebSocket hub started")
 
 	// Initialize handlers
-	authHandler := handlers.NewAuthHandler(userService, jwtService, cfg)
+	authHandler := handlers.NewAuthHandler(userService, jwtService, cfg, googleService)
 	roomHandler := handlers.NewRoomHandler(roomService)
 	chatHandler := handlers.NewChatHandler(chatService)
 	callsHandler := handlers.NewCallsHandler(callsService, roomService)
 	bandwidthHandler := handlers.NewBandwidthHandler(bandwidthService)
+	appointmentHandler := handlers.NewAppointmentHandler(appointmentService)
+	availabilityHandler := handlers.NewAvailabilityHandler(availabilityService)
 	wsHandler := websocket.NewHandler(wsHub, jwtService)
 
 	// Initialize middleware
@@ -88,6 +108,8 @@ func main() {
 		chatHandler,
 		callsHandler,
 		bandwidthHandler,
+		appointmentHandler,
+		availabilityHandler,
 		wsHandler,
 		authMiddleware,
 		cfg,

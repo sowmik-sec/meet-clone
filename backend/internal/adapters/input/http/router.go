@@ -13,15 +13,17 @@ import (
 )
 
 type Router struct {
-	router           *mux.Router
-	authHandler      *httpHandlers.AuthHandler
-	roomHandler      *httpHandlers.RoomHandler
-	chatHandler      *httpHandlers.ChatHandler
-	callsHandler     *httpHandlers.CallsHandler
-	bandwidthHandler *httpHandlers.BandwidthHandler
-	wsHandler        *websocket.Handler
-	authMiddleware   *middleware.AuthMiddleware
-	config           *config.Config
+	router              *mux.Router
+	authHandler         *httpHandlers.AuthHandler
+	roomHandler         *httpHandlers.RoomHandler
+	chatHandler         *httpHandlers.ChatHandler
+	callsHandler        *httpHandlers.CallsHandler
+	bandwidthHandler    *httpHandlers.BandwidthHandler
+	appointmentHandler  *httpHandlers.AppointmentHandler
+	availabilityHandler *httpHandlers.AvailabilityHandler
+	wsHandler           *websocket.Handler
+	authMiddleware      *middleware.AuthMiddleware
+	config              *config.Config
 }
 
 func NewRouter(
@@ -30,20 +32,24 @@ func NewRouter(
 	chatHandler *httpHandlers.ChatHandler,
 	callsHandler *httpHandlers.CallsHandler,
 	bandwidthHandler *httpHandlers.BandwidthHandler,
+	appointmentHandler *httpHandlers.AppointmentHandler,
+	availabilityHandler *httpHandlers.AvailabilityHandler,
 	wsHandler *websocket.Handler,
 	authMiddleware *middleware.AuthMiddleware,
 	cfg *config.Config,
 ) *Router {
 	return &Router{
-		router:           mux.NewRouter(),
-		authHandler:      authHandler,
-		roomHandler:      roomHandler,
-		chatHandler:      chatHandler,
-		callsHandler:     callsHandler,
-		bandwidthHandler: bandwidthHandler,
-		wsHandler:        wsHandler,
-		authMiddleware:   authMiddleware,
-		config:           cfg,
+		router:              mux.NewRouter(),
+		authHandler:         authHandler,
+		roomHandler:         roomHandler,
+		chatHandler:         chatHandler,
+		callsHandler:        callsHandler,
+		bandwidthHandler:    bandwidthHandler,
+		appointmentHandler:  appointmentHandler,
+		availabilityHandler: availabilityHandler,
+		wsHandler:           wsHandler,
+		authMiddleware:      authMiddleware,
+		config:              cfg,
 	}
 }
 
@@ -73,6 +79,8 @@ func (r *Router) Setup() http.Handler {
 	auth.HandleFunc("/register", r.authHandler.Register).Methods("POST")
 	auth.HandleFunc("/login", r.authHandler.Login).Methods("POST")
 	auth.HandleFunc("/logout", r.authHandler.Logout).Methods("POST")
+	auth.HandleFunc("/google", r.authHandler.GoogleLogin).Methods("GET")
+	auth.Handle("/google/callback", r.authMiddleware.Authenticate(http.HandlerFunc(r.authHandler.GoogleCallback))).Methods("GET")
 
 	// Protected routes - Auth
 	// We attach /me to the auth subrouter but wrap it with the auth middleware
@@ -111,6 +119,25 @@ func (r *Router) Setup() http.Handler {
 	bandwidth.HandleFunc("/report", r.bandwidthHandler.ReportBandwidth).Methods("POST")
 	bandwidth.HandleFunc("/stats", r.bandwidthHandler.GetStats).Methods("GET")
 	bandwidth.HandleFunc("/history", r.bandwidthHandler.GetHistory).Methods("GET")
+
+	// Protected routes - Appointments
+	appointments := api.PathPrefix("/appointments").Subrouter()
+	appointments.Use(r.authMiddleware.Authenticate)
+	appointments.HandleFunc("", r.appointmentHandler.CreateAppointment).Methods("POST")
+	appointments.HandleFunc("", r.appointmentHandler.GetUserAppointments).Methods("GET")
+	appointments.HandleFunc("/{id}/confirm", r.appointmentHandler.ConfirmAppointment).Methods("POST")
+	appointments.HandleFunc("/{id}", r.appointmentHandler.CancelAppointment).Methods("DELETE")
+	appointments.HandleFunc("/{id}/start", r.appointmentHandler.StartAppointment).Methods("POST")
+
+	// Protected routes - Availability
+	availability := api.PathPrefix("/availability").Subrouter()
+	availability.Use(r.authMiddleware.Authenticate)
+	availability.HandleFunc("", r.availabilityHandler.GetAvailability).Methods("GET")
+	availability.HandleFunc("", r.availabilityHandler.SaveAvailability).Methods("POST")
+
+	// Public routes - Availability (for booking)
+	// Important: This should verify user exists. For MVP, we trust ID.
+	api.HandleFunc("/users/{userId}/availability", r.availabilityHandler.GetPublicAvailability).Methods("GET")
 
 	// Health check
 	r.router.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
