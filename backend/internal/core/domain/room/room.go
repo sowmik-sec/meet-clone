@@ -13,6 +13,13 @@ const (
 	RoomStatusEnded  RoomStatus = "ended"
 )
 
+type RoomType string
+
+const (
+	RoomTypeMeeting RoomType = "meeting"
+	RoomTypeWebinar RoomType = "webinar"
+)
+
 type Participant struct {
 	UserID   string    `json:"user_id" bson:"user_id"`
 	Name     string    `json:"name" bson:"name"`
@@ -31,6 +38,7 @@ type WaitingParticipant struct {
 type Room struct {
 	ID                  string               `json:"id" bson:"_id"`
 	CreatedBy           string               `json:"created_by" bson:"created_by"`
+	RoomType            RoomType             `json:"room_type" bson:"room_type"`
 	CloudflareSessionID string               `json:"cloudflare_session_id,omitempty" bson:"cloudflare_session_id,omitempty"`
 	Status              RoomStatus           `json:"status" bson:"status"`
 	Participants        []Participant        `json:"participants" bson:"participants"`
@@ -40,10 +48,11 @@ type Room struct {
 	EndedAt             time.Time            `json:"ended_at,omitempty" bson:"ended_at,omitempty"`
 }
 
-func NewRoom(createdBy string, maxCapacity int) *Room {
+func NewRoom(createdBy string, maxCapacity int, roomType RoomType) *Room {
 	return &Room{
 		ID:                  uuid.New().String(),
 		CreatedBy:           createdBy,
+		RoomType:            roomType,
 		Status:              RoomStatusActive,
 		Participants:        []Participant{},
 		WaitingParticipants: []WaitingParticipant{},

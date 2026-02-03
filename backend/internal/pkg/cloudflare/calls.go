@@ -144,19 +144,30 @@ func maskSecret(secret string) string {
 
 // GenerateToken generates a participant token by calling Cloudflare's API
 // isCreator determines if participant gets moderator preset (auto-admit) or participant preset (needs approval)
-func (s *CallsService) GenerateToken(sessionID, participantID string, isCreator bool) (*GenerateTokenResponse, error) {
+// isWebinar determines if webinar presets should be used instead of group call presets
+func (s *CallsService) GenerateToken(sessionID, participantID string, isCreator bool, isWebinar bool) (*GenerateTokenResponse, error) {
 	// Call Cloudflare API to create participant and get auth token
 	participantURL := fmt.Sprintf("%s/accounts/%s/realtime/kit/%s/meetings/%s/participants",
 		s.baseURL, s.accountID, s.appID, sessionID)
 
-	log.Printf("[Cloudflare] Creating participant via API - URL: %s, ParticipantID: %s, IsCreator: %v", participantURL, participantID, isCreator)
+	log.Printf("[Cloudflare] Creating participant via API - URL: %s, ParticipantID: %s, IsCreator: %v, IsWebinar: %v", participantURL, participantID, isCreator, isWebinar)
 
-	// Assign preset based on creator status
-	// group_call_host: auto-admits to meeting, can approve others
-	// group_call_participant: requires approval from host
-	presetName := "group_call_participant"
-	if isCreator {
-		presetName = "group_call_host"
+	// Assign preset based on room type and creator status
+	var presetName string
+	if isWebinar {
+		// Webinar mode: presenters can broadcast, viewers can only watch
+		if isCreator {
+			presetName = "webinar_presenter"
+		} else {
+			presetName = "webinar_viewer"
+		}
+	} else {
+		// Meeting mode: all participants can share audio/video
+		if isCreator {
+			presetName = "group_call_host"
+		} else {
+			presetName = "group_call_participant"
+		}
 	}
 
 	participantReq := map[string]interface{}{

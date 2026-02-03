@@ -7,7 +7,7 @@ import (
 )
 
 type Service interface {
-	CreateRoom(ctx context.Context, userID string) (*Room, error)
+	CreateRoom(ctx context.Context, userID string, roomType RoomType) (*Room, error)
 	JoinRoom(ctx context.Context, roomID, userID, userName, avatar string) (*Room, error)
 	LeaveRoom(ctx context.Context, roomID, userID string) (*Room, error)
 	GetRoomDetails(ctx context.Context, roomID string) (*Room, error)
@@ -31,8 +31,13 @@ func NewService(repo Repository) Service {
 	}
 }
 
-func (s *service) CreateRoom(ctx context.Context, userID string) (*Room, error) {
-	room := NewRoom(userID, 10) // Max 10 participants for MVP
+func (s *service) CreateRoom(ctx context.Context, userID string, roomType RoomType) (*Room, error) {
+	// Set max capacity based on room type
+	maxCapacity := 10
+	if roomType == RoomTypeWebinar {
+		maxCapacity = 100 // Webinars support more viewers
+	}
+	room := NewRoom(userID, maxCapacity, roomType)
 
 	if err := s.repo.Create(ctx, room); err != nil {
 		return nil, errors.NewInternalError("failed to create room", err)

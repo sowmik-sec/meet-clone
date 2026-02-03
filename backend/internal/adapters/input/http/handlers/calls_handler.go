@@ -129,9 +129,10 @@ func (h *CallsHandler) GenerateToken(w http.ResponseWriter, r *http.Request) {
 
 	// Check if user is the room creator
 	isCreator := room.CreatedBy == userID
-	logger.Info.Printf("Generating token for user %s (isCreator: %v) in room %s", userID, isCreator, room.ID)
+	isWebinar := room.RoomType == "webinar"
+	logger.Info.Printf("Generating token for user %s (isCreator: %v, isWebinar: %v) in room %s", userID, isCreator, isWebinar, room.ID)
 
-	token, err := h.service.GenerateToken(req.SessionID, userID, isCreator)
+	token, err := h.service.GenerateToken(req.SessionID, userID, isCreator, isWebinar)
 	if err != nil {
 		logger.Error.Printf("Failed to generate token: %v", err)
 		http.Error(w, "Failed to generate token", http.StatusInternalServerError)

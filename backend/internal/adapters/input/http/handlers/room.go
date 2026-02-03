@@ -21,6 +21,10 @@ func NewRoomHandler(roomService room.Service) *RoomHandler {
 	}
 }
 
+type CreateRoomRequest struct {
+	RoomType string `json:"room_type"` // "meeting" or "webinar"
+}
+
 func (h *RoomHandler) CreateRoom(w http.ResponseWriter, r *http.Request) {
 	claims, ok := middleware.GetUserFromContext(r.Context())
 	if !ok {
@@ -28,7 +32,16 @@ func (h *RoomHandler) CreateRoom(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rm, err := h.roomService.CreateRoom(r.Context(), claims.UserID)
+	var req CreateRoomRequest
+	json.NewDecoder(r.Body).Decode(&req)
+
+	// Default to meeting type if not specified
+	roomType := room.RoomTypeMeeting
+	if req.RoomType == "webinar" {
+		roomType = room.RoomTypeWebinar
+	}
+
+	rm, err := h.roomService.CreateRoom(r.Context(), claims.UserID, roomType)
 	if err != nil {
 		if appErr, ok := err.(*errors.AppError); ok {
 			respondError(w, appErr, getStatusCode(appErr.Type))
