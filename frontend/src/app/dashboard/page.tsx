@@ -5,29 +5,36 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
 import { roomApi } from '@/lib/api/room';
+import { Video, Calendar, Clock, Users, Copy, Check } from 'lucide-react';
+import { appointmentApi } from '@/lib/api/appointment';
+import { useToast } from '../../components/ui/use-toast';
+import { Appointment } from '@/types/appointment';
 import { Room } from '@/types/room';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import { EndMeetingModal } from '@/components/dashboard/EndMeetingModal';
 import { MeetingCreatedModal } from '@/components/dashboard/MeetingCreatedModal';
 import BandwidthStatsCard from '@/components/dashboard/BandwidthStatsCard';
-import { Copy, Check } from 'lucide-react';
+
+import { Navigation } from '@/components/ui/Navigation';
 
 export default function DashboardPage() {
   const router = useRouter();
   const { user, isAuthenticated, hasHydrated, logout, initializeAuth } = useAuth();
+  const { toast } = useToast();
   const [roomId, setRoomId] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [selectedRoomType, setSelectedRoomType] = useState<'meeting' | 'webinar'>('meeting');
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [isLoadingAppointments, setIsLoadingAppointments] = useState(true);
   const [activeRooms, setActiveRooms] = useState<Room[]>([]);
   const [isLoadingRooms, setIsLoadingRooms] = useState(true);
+  const [isEndMeetingModalOpen, setIsEndMeetingModalOpen] = useState(false);
   const [roomToEnd, setRoomToEnd] = useState<string | null>(null);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isMeetingCreatedModalOpen, setIsMeetingCreatedModalOpen] = useState(false);
-  const [createdRoomId, setCreatedRoomId] = useState('');
+  const [createdRoomId, setCreatedRoomId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Initialize auth from cookies on mount
@@ -35,6 +42,7 @@ export default function DashboardPage() {
     initializeAuth();
   }, [initializeAuth]);
 
+  // Redirect if not authenticated
   useEffect(() => {
     if (hasHydrated && !isAuthenticated) {
       router.push('/login');
@@ -42,21 +50,26 @@ export default function DashboardPage() {
   }, [isAuthenticated, hasHydrated, router]);
 
   useEffect(() => {
-    const loadActiveRooms = async () => {
+    const fetchData = async () => {
       try {
-        setIsLoadingRooms(true);
-        // Get user's active rooms from backend
-        const rooms = await roomApi.getUserRooms();
-        setActiveRooms(rooms);
+        const [appts, rooms] = await Promise.all([
+          appointmentApi.getAppointments({
+            start_time_after: new Date().toISOString(),
+          }),
+          roomApi.getUserRooms()
+        ]);
+        setAppointments(appts || []);
+        setActiveRooms(rooms || []);
       } catch (error) {
-        console.error('Failed to load rooms:', error);
+        console.error('Failed to fetch dashboard data:', error);
       } finally {
+        setIsLoadingAppointments(false);
         setIsLoadingRooms(false);
       }
     };
 
     if (isAuthenticated) {
-      loadActiveRooms();
+      fetchData();
     }
   }, [isAuthenticated]);
 
@@ -79,7 +92,7 @@ export default function DashboardPage() {
 
   const handleEndRoom = (roomId: string) => {
     setRoomToEnd(roomId);
-    setIsDeleteDialogOpen(true);
+    setIsEndMeetingModalOpen(true);
   };
 
   const confirmEndRoom = async () => {
@@ -89,7 +102,7 @@ export default function DashboardPage() {
       await roomApi.endRoom(roomToEnd);
       // Remove room from local state
       setActiveRooms(prev => prev.filter(room => room.id !== roomToEnd));
-      setIsDeleteDialogOpen(false);
+      setIsEndMeetingModalOpen(false);
       setRoomToEnd(null);
     } catch (error) {
       console.error('Failed to end room:', error);
@@ -123,31 +136,29 @@ export default function DashboardPage() {
     }
   };
 
-  if (!hasHydrated || !isAuthenticated || !user) {
-    return null;
-  }
+  if (!hasHydrated) return null;
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
-      <nav className="border-b bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16 items-center">
-            <h1 className="text-2xl font-bold text-blue-600">Meet Clone</h1>
-            <div className="flex items-center gap-4">
-              <span className="text-gray-700">Welcome, {user.name}</span>
-              <Button variant="ghost" onClick={logout}>
-                Logout
-              </Button>
-            </div>
-          </div>
-        </div>
-      </nav>
+    <div className="min-h-screen bg-gray-50">
+      <Navigation />
 
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <div className="mb-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <header className="mb-12">
+          <h1 className="text-4xl font-extrabold text-gray-900 mb-2">
+            Welcome back, <span className="text-blue-600">{user?.name}</span>
+          </h1>
+          <p className="text-gray-600">Here's what's happening today.</p>
+        </header>
+
+        <div className="mb-8 p-6 bg-gray-900 rounded-xl shadow-lg text-white">
           <BandwidthStatsCard />
         </div>
-        <div className="grid md:grid-cols-2 gap-8">
+
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-semibold">Quick Actions</h2>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-8 mb-8">
           <Card>
             <CardHeader>
               <CardTitle>Create New Session</CardTitle>
@@ -210,6 +221,50 @@ export default function DashboardPage() {
           </Card>
         </div>
 
+        {/* Upcoming Appointments Section */}
+        <div className="mb-8">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold">Upcoming Appointments</h2>
+            <Button variant="outline" onClick={() => router.push('/schedule')}>View Schedule</Button>
+          </div>
+          <div className="grid gap-4 md:grid-cols-3">
+            {isLoadingAppointments ? (
+              <div className="col-span-full text-center p-8">Loading appointments...</div>
+            ) : appointments.length === 0 ? (
+              <Card className="col-span-full">
+                <CardContent className="p-6 text-center text-gray-500">
+                  No upcoming appointments. <span className="text-blue-600 cursor-pointer" onClick={() => router.push('/schedule/new')}>Schedule one?</span>
+                </CardContent>
+              </Card>
+            ) : (
+              appointments.map(appt => (
+                <Card key={appt.id}>
+                  <CardContent className="p-4">
+                    <h3 className="font-semibold truncate">{appt.title}</h3>
+                    <div className="text-sm text-gray-500 mt-2 space-y-1">
+                      <div className="flex items-center">
+                        <Calendar className="w-3 h-3 mr-2" />
+                        {new Date(appt.start_time).toLocaleDateString()}
+                      </div>
+                      <div className="flex items-center">
+                        <Clock className="w-3 h-3 mr-2" />
+                        {new Date(appt.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                      <div className="flex items-center capitalize">
+                        {appt.meeting_type === 'webinar' ? <Users className="w-3 h-3 mr-2" /> : <Video className="w-3 h-3 mr-2" />}
+                        {appt.meeting_type}
+                      </div>
+                    </div>
+                    <Button className="w-full mt-4 h-8 text-sm" onClick={() => router.push('/schedule')}>
+                      View Details
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))
+            )}
+          </div>
+        </div>
+
         {/* Active Rooms Section */}
         {activeRooms?.length > 0 && (
           <Card className="mt-12">
@@ -269,7 +324,7 @@ export default function DashboardPage() {
           </Card>
         )}
 
-        {isLoadingRooms && activeRooms.length === 0 && (
+        {isLoadingRooms && activeRooms?.length === 0 && (
           <div className="mt-12 bg-white rounded-lg p-8 text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
             <p className="text-gray-600">Loading your meetings...</p>
@@ -300,15 +355,15 @@ export default function DashboardPage() {
       </main>
 
       <EndMeetingModal
-        isOpen={isDeleteDialogOpen}
-        onOpenChange={setIsDeleteDialogOpen}
+        isOpen={isEndMeetingModalOpen}
+        onOpenChange={setIsEndMeetingModalOpen}
         onConfirm={confirmEndRoom}
       />
 
       <MeetingCreatedModal
         isOpen={isMeetingCreatedModalOpen}
         onOpenChange={setIsMeetingCreatedModalOpen}
-        roomId={createdRoomId}
+        roomId={createdRoomId ?? ''}
         onJoinMeeting={handleJoinCreatedRoom}
       />
     </div>
