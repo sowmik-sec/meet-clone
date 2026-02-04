@@ -3,6 +3,7 @@ package appointment
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -20,6 +21,13 @@ type CreateAppointmentRequest struct {
 	EndTime     time.Time `json:"end_time"`
 	Timezone    string    `json:"timezone"`
 	MeetingType string    `json:"meeting_type"` // "meeting" or "webinar"
+}
+
+type CreatePublicBookingRequest struct {
+	GuestName  string    `json:"guest_name"`
+	GuestEmail string    `json:"guest_email"`
+	StartTime  time.Time `json:"start_time"`
+	Timezone   string    `json:"timezone"`
 }
 
 type UpdateAppointmentRequest struct {
@@ -40,6 +48,7 @@ type Service interface {
 	CancelAppointment(ctx context.Context, id, userID string) error
 	ConfirmAppointment(ctx context.Context, id, hostID string) error
 	StartAppointment(ctx context.Context, id, userID string) (string, error) // Returns room ID
+	CreatePublicBooking(ctx context.Context, hostID string, req CreatePublicBookingRequest) (*Appointment, error)
 }
 
 // Service Implementation
@@ -157,8 +166,9 @@ func (s *service) CancelAppointment(ctx context.Context, id, userID string) erro
 	}
 
 	// Send Cancellation Email
-	// Ideally we look up guest/host email.
-	// s.emailService.SendAppointmentCancellation("guest@example.com", appt.Title, appt.StartTime.String())
+	if strings.Contains(appt.GuestID, "@") {
+		s.emailService.SendAppointmentCancellation(appt.GuestID, appt.Title, appt.StartTime.String())
+	}
 	return nil
 }
 
@@ -183,7 +193,15 @@ func (s *service) ConfirmAppointment(ctx context.Context, id, hostID string) err
 	}
 
 	// Send Confirmation Email
-	// s.emailService.SendAppointmentConfirmation(...)
+	if strings.Contains(appt.GuestID, "@") {
+		// For public bookings, GuestName is stored in Title usually or we just use "Guest"
+		// Using GuestID as name backup if we don't have separate name field in DB yet for generic appointments
+		// In CreatePublicBooking we stored GuestName in appt.Title? No, Title is "Public Booking..."
+		// Wait, CreatePublicBooking:
+		// req.GuestName, // Title is guest name
+		// So appt.Title IS the Guest Name for public bookings.
+		s.emailService.SendAppointmentConfirmation(appt.GuestID, appt.Title, appt.Title, appt.StartTime.String(), "http://localhost:3000/appointments/"+appt.ID)
+	}
 	return nil
 }
 
@@ -221,4 +239,45 @@ func (s *service) StartAppointment(ctx context.Context, id, userID string) (stri
 	}
 
 	return appt.RoomID, nil
+}
+
+func (s *service) CreatePublicBooking(ctx context.Context, hostID string, req CreatePublicBookingRequest) (*Appointment, error) {
+	if req.StartTime.Before(time.Now()) {
+		return nil, errors.New("start time must be in the future")
+	}
+
+	// Default duration 30 mins for now if not specified (or derived from slots in future)
+	// For MVP simplicity: 60 mins default
+	endTime := req.StartTime.Add(60 * time.Minute)
+
+	// Check for conflicts
+	hasConflict, err := s.repo.HasConflict(ctx, hostID, req.StartTime.Format(time.RFC3339), endTime.Format(time.RFC3339))
+	if err != nil {
+		return nil, err
+	}
+	if hasConflict {
+		return nil, errors.New("selected time slot is no longer available")
+	}
+
+	appt := NewAppointment(
+		hostID,
+		req.GuestEmail,                // Using email as ID for guest since they might not be reg user
+		req.GuestName,                 // Title is guest name
+		"Public Booking via Calendar", // Description
+		req.Timezone,
+		"meeting",
+		req.StartTime,
+		endTime,
+	)
+	appt.ID = uuid.New().String()
+	appt.Status = StatusConfirmed // Auto-confirm public bookings for MVP
+
+	if err := s.repo.Create(ctx, appt); err != nil {
+		return nil, err
+	}
+
+	// Send Email Notifications (Host + Guest)
+	s.emailService.SendAppointmentConfirmation(req.GuestEmail, req.GuestName, appt.Title, appt.StartTime.String(), "http://localhost:3000/appointments/"+appt.ID)
+
+	return appt, nil
 }

@@ -93,3 +93,34 @@ func (r *appointmentRepository) Delete(ctx context.Context, id string) error {
 	_, err := r.collection.DeleteOne(ctx, bson.M{"_id": id})
 	return err
 }
+
+func (r *appointmentRepository) HasConflict(ctx context.Context, userID string, startTime string, endTime string) (bool, error) {
+	start, err := time.Parse(time.RFC3339, startTime)
+	if err != nil {
+		return false, err
+	}
+	end, err := time.Parse(time.RFC3339, endTime)
+	if err != nil {
+		return false, err
+	}
+
+	// Conflict condition:
+	// (NewStart < ExistingEnd) AND (NewEnd > ExistingStart)
+	// And status is CONFIRMED (ignoring cancelled)
+	filter := bson.M{
+		"$or": []bson.M{
+			{"host_id": userID},
+			{"guest_id": userID},
+		},
+		"status":     appointment.StatusConfirmed,
+		"start_time": bson.M{"$lt": end},
+		"end_time":   bson.M{"$gt": start},
+	}
+
+	count, err := r.collection.CountDocuments(ctx, filter)
+	if err != nil {
+		return false, err
+	}
+
+	return count > 0, nil
+}

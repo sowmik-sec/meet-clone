@@ -16,4 +16,5 @@ type Repository interface {
 	FindByUser(ctx context.Context, userID string, filter AppointmentFilter) ([]Appointment, error)
 	Update(ctx context.Context, appointment *Appointment) error
 	Delete(ctx context.Context, id string) error
+	HasConflict(ctx context.Context, userID string, startTime, endTime string) (bool, error)
 }
