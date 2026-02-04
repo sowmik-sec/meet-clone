@@ -41,6 +41,32 @@ export default function BookingPage() {
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [loading, setLoading] = useState(true);
+    const [bookedSlots, setBookedSlots] = useState<string[][]>([]);
+
+    useEffect(() => {
+        const fetchBookedSlots = async () => {
+            if (!userId || !selectedDate) return;
+            try {
+                const slots = await appointmentApi.getBookedSlots(userId, selectedDate);
+                setBookedSlots(slots);
+            } catch (error) {
+                console.error('Failed to fetch booked slots', error);
+            }
+        };
+        fetchBookedSlots();
+    }, [userId, selectedDate]);
+
+    const isSlotAvailable = (timeStr: string) => {
+        if (!selectedDate) return false;
+        const slotStart = new Date(`${selectedDate}T${timeStr}:00`);
+        const slotEnd = new Date(slotStart.getTime() + 60 * 60 * 1000); // Assuming 1 hour duration
+
+        return !bookedSlots.some(([start, end]) => {
+            const bookedStart = new Date(start);
+            const bookedEnd = new Date(end);
+            return (slotStart < bookedEnd && slotEnd > bookedStart);
+        });
+    };
 
     useEffect(() => {
         const fetchAvailability = async () => {
@@ -100,10 +126,20 @@ export default function BookingPage() {
 
                         {selectedDate && (
                             <div className="grid grid-cols-2 gap-2 mt-4">
-                                {/* Mock slots for now based on schedule logic would go here */}
-                                <Button variant={selectedSlot === '09:00' ? 'default' : 'outline'} onClick={() => setSelectedSlot('09:00')}>09:00 AM</Button>
-                                <Button variant={selectedSlot === '10:00' ? 'default' : 'outline'} onClick={() => setSelectedSlot('10:00')}>10:00 AM</Button>
-                                <Button variant={selectedSlot === '11:00' ? 'default' : 'outline'} onClick={() => setSelectedSlot('11:00')}>11:00 AM</Button>
+                                {['09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00'].map(time => {
+                                    const available = isSlotAvailable(time);
+                                    return (
+                                        <Button
+                                            key={time}
+                                            variant={selectedSlot === time ? 'default' : 'outline'}
+                                            onClick={() => available && setSelectedSlot(time)}
+                                            disabled={!available}
+                                            className={!available ? 'opacity-50 cursor-not-allowed bg-gray-100 text-gray-400' : ''}
+                                        >
+                                            {available ? time : 'Booked'}
+                                        </Button>
+                                    );
+                                })}
                             </div>
                         )}
                     </div>

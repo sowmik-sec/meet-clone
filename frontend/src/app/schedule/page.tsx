@@ -20,6 +20,16 @@ import {
 
 import { Navigation } from '@/components/ui/Navigation';
 
+const doesMeetingAllowStart = (startTime: string, endTime: string) => {
+    const now = new Date();
+    const start = new Date(startTime);
+    const end = new Date(endTime);
+    // Allow start 15 mins before
+    const windowStart = new Date(start.getTime() - 15 * 60 * 1000);
+
+    return now >= windowStart && now <= end;
+};
+
 export default function SchedulePage() {
     const router = useRouter();
     const { isAuthenticated, hasHydrated } = useAuth();
@@ -153,10 +163,12 @@ export default function SchedulePage() {
                                         {appt.description && <p className="mt-2 text-gray-600">{appt.description}</p>}
                                     </div>
                                     <div className="flex gap-2">
-                                        {appt.status === 'confirmed' && (
+                                        {appt.status === 'confirmed' && doesMeetingAllowStart(appt.start_time, appt.end_time) && (
                                             <Button onClick={() => handleStartMeeting(appt.id)}>Start</Button>
                                         )}
-                                        <Button variant="outline" onClick={() => setCancelId(appt.id)}>Cancel</Button>
+                                        {appt.status !== 'cancelled' && (
+                                            <Button variant="outline" onClick={() => setCancelId(appt.id)}>Cancel</Button>
+                                        )}
                                     </div>
                                 </CardContent>
                             </Card>

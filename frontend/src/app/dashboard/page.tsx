@@ -58,7 +58,7 @@ export default function DashboardPage() {
           }),
           roomApi.getUserRooms()
         ]);
-        setAppointments(appts || []);
+        setAppointments((appts || []).filter(a => a.status !== 'cancelled'));
         setActiveRooms(rooms || []);
       } catch (error) {
         console.error('Failed to fetch dashboard data:', error);

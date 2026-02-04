@@ -34,4 +34,8 @@ export const appointmentApi = {
         const response = await api.post<Appointment>(`/users/${userId}/bookings`, data);
         return response.data;
     },
+    getBookedSlots: async (userId: string, date: string): Promise<string[][]> => {
+        const response = await api.get<string[][]>(`/users/${userId}/booked-slots?date=${date}`);
+        return response.data;
+    },
 };
