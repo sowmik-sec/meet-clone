@@ -18,6 +18,7 @@ import (
 	"github.com/meet-clone/backend/internal/core/domain/availability"
 	"github.com/meet-clone/backend/internal/core/domain/bandwidth"
 	"github.com/meet-clone/backend/internal/core/domain/chat"
+	"github.com/meet-clone/backend/internal/core/domain/eventtype"
 	"github.com/meet-clone/backend/internal/core/domain/room"
 	"github.com/meet-clone/backend/internal/core/domain/user"
 	"github.com/meet-clone/backend/internal/pkg/calendar"
@@ -58,6 +59,7 @@ func main() {
 	bandwidthRepo := mongodb.NewBandwidthRepository(mongoClient)
 	appointmentRepo := mongodb.NewAppointmentRepository(mongoClient.Database())
 	availabilityRepo := mongodb.NewAvailabilityRepository(mongoClient.Database())
+	eventTypeRepo := mongodb.NewEventTypeRepository(mongoClient.Database())
 
 	// Initialize Email service
 	emailService := email.NewResendService(os.Getenv("RESEND_API_KEY"), "onboarding@resend.dev")
@@ -74,8 +76,9 @@ func main() {
 	roomService := room.NewService(roomRepo)
 	chatService := chat.NewService(chatRepo)
 	bandwidthService := bandwidth.NewService(bandwidthRepo)
-	appointmentService := appointment.NewService(appointmentRepo, roomService, emailService)
+	appointmentService := appointment.NewService(appointmentRepo, roomService, emailService, eventTypeRepo, userRepo)
 	availabilityService := availability.NewService(availabilityRepo)
+	eventTypeService := eventtype.NewService(eventTypeRepo)
 
 	// Initialize JWT service
 	jwtService := jwt.NewJWTService(cfg.JWTSecret, cfg.JWTExpiry)
@@ -96,6 +99,7 @@ func main() {
 	bandwidthHandler := handlers.NewBandwidthHandler(bandwidthService)
 	appointmentHandler := handlers.NewAppointmentHandler(appointmentService)
 	availabilityHandler := handlers.NewAvailabilityHandler(availabilityService)
+	eventTypeHandler := handlers.NewEventTypeHandler(eventTypeService)
 	wsHandler := websocket.NewHandler(wsHub, jwtService)
 
 	// Initialize middleware
@@ -110,6 +114,7 @@ func main() {
 		bandwidthHandler,
 		appointmentHandler,
 		availabilityHandler,
+		eventTypeHandler,
 		wsHandler,
 		authMiddleware,
 		cfg,

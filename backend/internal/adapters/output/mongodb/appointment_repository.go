@@ -112,9 +112,9 @@ func (r *appointmentRepository) HasConflict(ctx context.Context, userID string, 
 			{"host_id": userID},
 			{"guest_id": userID},
 		},
-		"status":     appointment.StatusConfirmed,
-		"start_time": bson.M{"$lt": end},
-		"end_time":   bson.M{"$gt": start},
+		"status":              appointment.StatusConfirmed,
+		"buffered_start_time": bson.M{"$lt": end},
+		"buffered_end_time":   bson.M{"$gt": start},
 	}
 
 	count, err := r.collection.CountDocuments(ctx, filter)
@@ -139,7 +139,7 @@ func (r *appointmentRepository) GetBookedSlots(ctx context.Context, userID strin
 			{"guest_id": userID},
 		},
 		"status": appointment.StatusConfirmed,
-		"start_time": bson.M{
+		"buffered_start_time": bson.M{
 			"$gte": startOfDay,
 			"$lt":  endOfDay,
 		},
@@ -160,8 +160,8 @@ func (r *appointmentRepository) GetBookedSlots(ctx context.Context, userID strin
 	var slots [][]string
 	for _, appt := range appointments {
 		slots = append(slots, []string{
-			appt.StartTime.Format(time.RFC3339),
-			appt.EndTime.Format(time.RFC3339),
+			appt.BufferedStartTime.Format(time.RFC3339),
+			appt.BufferedEndTime.Format(time.RFC3339),
 		})
 	}
 	return slots, nil

@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/meet-clone/backend/internal/core/domain/eventtype"
 	"github.com/meet-clone/backend/internal/core/domain/room"
+	"github.com/meet-clone/backend/internal/core/domain/user"
 	"github.com/meet-clone/backend/internal/pkg/email"
 )
 
@@ -24,10 +26,11 @@ type CreateAppointmentRequest struct {
 }
 
 type CreatePublicBookingRequest struct {
-	GuestName  string    `json:"guest_name"`
-	GuestEmail string    `json:"guest_email"`
-	StartTime  time.Time `json:"start_time"`
-	Timezone   string    `json:"timezone"`
+	GuestName   string    `json:"guest_name"`
+	GuestEmail  string    `json:"guest_email"`
+	StartTime   time.Time `json:"start_time"`
+	Timezone    string    `json:"timezone"`
+	EventTypeID string    `json:"event_type_id"`
 }
 
 type UpdateAppointmentRequest struct {
@@ -56,16 +59,20 @@ type Service interface {
 // Service Implementation
 
 type service struct {
-	repo         Repository
-	roomService  room.Service
-	emailService email.Service
+	repo          Repository
+	roomService   room.Service
+	emailService  email.Service
+	eventTypeRepo eventtype.Repository
+	userRepo      user.Repository
 }
 
-func NewService(repo Repository, roomService room.Service, emailService email.Service) Service {
+func NewService(repo Repository, roomService room.Service, emailService email.Service, eventTypeRepo eventtype.Repository, userRepo user.Repository) Service {
 	return &service{
-		repo:         repo,
-		roomService:  roomService,
-		emailService: emailService,
+		repo:          repo,
+		roomService:   roomService,
+		emailService:  emailService,
+		eventTypeRepo: eventTypeRepo,
+		userRepo:      userRepo,
 	}
 }
 
@@ -87,6 +94,8 @@ func (s *service) CreateAppointment(ctx context.Context, hostID string, req Crea
 		req.StartTime,
 		req.EndTime,
 	)
+	appt.BufferedStartTime = appt.StartTime // No buffer for manual appt for now?
+	appt.BufferedEndTime = appt.EndTime
 	appt.ID = uuid.New().String()
 	appt.Status = StatusConfirmed // Auto-confirm for now since host is creating it
 
@@ -259,12 +268,28 @@ func (s *service) CreatePublicBooking(ctx context.Context, hostID string, req Cr
 		return nil, errors.New("start time must be in the future")
 	}
 
-	// Default duration 30 mins for now if not specified (or derived from slots in future)
-	// For MVP simplicity: 60 mins default
-	endTime := req.StartTime.Add(60 * time.Minute)
+	// Default duration 30 mins
+	duration := 30 * time.Minute
+	var bufferBefore, bufferAfter int
+
+	// If EventTypeID is provided, fetch duration
+	if req.EventTypeID != "" {
+		et, err := s.eventTypeRepo.GetByID(ctx, req.EventTypeID)
+		if err == nil && et != nil {
+			duration = time.Duration(et.Duration) * time.Minute
+			bufferBefore = et.BufferBefore
+			bufferAfter = et.BufferAfter
+		}
+	}
+
+	endTime := req.StartTime.Add(duration)
 
 	// Check for conflicts
-	hasConflict, err := s.repo.HasConflict(ctx, hostID, req.StartTime.Format(time.RFC3339), endTime.Format(time.RFC3339))
+	// Use Buffered times for conflict check
+	checkStart := req.StartTime.Add(-time.Duration(bufferBefore) * time.Minute)
+	checkEnd := endTime.Add(time.Duration(bufferAfter) * time.Minute)
+
+	hasConflict, err := s.repo.HasConflict(ctx, hostID, checkStart.Format(time.RFC3339), checkEnd.Format(time.RFC3339))
 	if err != nil {
 		return nil, err
 	}
@@ -283,13 +308,28 @@ func (s *service) CreatePublicBooking(ctx context.Context, hostID string, req Cr
 		endTime,
 	)
 	appt.ID = uuid.New().String()
+	appt.EventTypeID = req.EventTypeID
+	appt.BufferBefore = bufferBefore
+	appt.BufferAfter = bufferAfter
+	appt.BufferedStartTime = appt.StartTime.Add(-time.Duration(bufferBefore) * time.Minute)
+	appt.BufferedEndTime = appt.EndTime.Add(time.Duration(bufferAfter) * time.Minute)
 	appt.Status = StatusPending // Require host approval
 
 	if err := s.repo.Create(ctx, appt); err != nil {
 		return nil, err
 	}
 
-	s.emailService.SendAppointmentPending(req.GuestEmail, req.GuestName, appt.Title, appt.StartTime.String())
+	// Notify Guest
+	s.emailService.SendAppointmentPending(req.GuestEmail, req.GuestName, appt.Title, appt.StartTime.Format("Jan 2, 2006 at 3:04 PM"))
+
+	// Notify Host
+	hostUser, err := s.userRepo.FindByID(ctx, hostID)
+	if err == nil && hostUser != nil {
+		// Construct a link to the dashboard or appointment details
+		// For now, just a generic link or maybe appointment specific if we have a UI for it
+		link := "http://localhost:3000/dashboard"
+		s.emailService.SendAppointmentInvitation(hostUser.Email, req.GuestName, appt.Title, appt.StartTime.Format("Jan 2, 2006 at 3:04 PM"), link)
+	}
 
 	return appt, nil
 }
