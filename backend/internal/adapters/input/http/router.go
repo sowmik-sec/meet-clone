@@ -138,6 +138,7 @@ func (r *Router) Setup() http.Handler {
 	// Public routes - Availability (for booking)
 	// Important: This should verify user exists. For MVP, we trust ID.
 	api.HandleFunc("/users/{userId}/availability", r.availabilityHandler.GetPublicAvailability).Methods("GET")
+	api.HandleFunc("/users/{userId}/bookings", r.appointmentHandler.CreatePublicBooking).Methods("POST")
 
 	// Health check
 	r.router.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {

@@ -134,3 +134,22 @@ func (h *AppointmentHandler) StartAppointment(w http.ResponseWriter, r *http.Req
 
 	respondJSON(w, map[string]string{"room_id": roomID}, http.StatusOK)
 }
+
+func (h *AppointmentHandler) CreatePublicBooking(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	hostID := vars["userId"] // from /users/{userId}/bookings
+
+	var req appointment.CreatePublicBookingRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, errors.NewBadRequestError("invalid request body", err), http.StatusBadRequest)
+		return
+	}
+
+	appt, err := h.service.CreatePublicBooking(r.Context(), hostID, req)
+	if err != nil {
+		respondError(w, errors.NewInternalError("failed to create booking", err), http.StatusInternalServerError)
+		return
+	}
+
+	respondJSON(w, appt, http.StatusCreated)
+}
