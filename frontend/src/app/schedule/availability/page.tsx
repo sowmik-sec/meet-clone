@@ -7,6 +7,8 @@ import { Input } from '@/components/ui/input';
 import { useAuth } from '@/hooks/useAuth';
 import api from '@/lib/api/client';
 import { useToast } from '@/components/ui/use-toast';
+import { Navigation } from '@/components/ui/Navigation';
+import { Copy, Check } from 'lucide-react';
 
 interface TimeSlot {
     start: string;
@@ -27,13 +29,12 @@ interface Availability {
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-import { Navigation } from '@/components/ui/Navigation';
-
 export default function AvailabilityPage() {
-    const { isAuthenticated } = useAuth();
+    const { isAuthenticated, user } = useAuth();
     const { toast } = useToast();
     const [availability, setAvailability] = useState<Availability | null>(null);
     const [loading, setLoading] = useState(true);
+    const [copied, setCopied] = useState(false);
 
     useEffect(() => {
         const fetchAvailability = async () => {
@@ -74,6 +75,15 @@ export default function AvailabilityPage() {
         setAvailability({ ...availability, schedule: newSchedule });
     };
 
+    const copyBookingLink = () => {
+        if (!user?.id) return;
+        const link = `${window.location.origin}/b/${user.id}`;
+        navigator.clipboard.writeText(link);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+        toast({ title: 'Copied', description: 'Booking link copied to clipboard.' });
+    };
+
     if (!availability && !loading) return <div>Failed to load</div>;
     if (loading) return <div>Loading...</div>;
 
@@ -91,9 +101,15 @@ export default function AvailabilityPage() {
                         <CardTitle>Availability</CardTitle>
                         <CardDescription>Set your weekly schedule</CardDescription>
                     </div>
-                    <Button variant="outline" onClick={() => window.location.href = '/api/v1/auth/google'}>
-                        Sync Google Calendar
-                    </Button>
+                    <div className="flex gap-2">
+                        <Button variant="outline" onClick={copyBookingLink}>
+                            {copied ? <Check className="w-4 h-4 mr-2" /> : <Copy className="w-4 h-4 mr-2" />}
+                            Copy Booking Link
+                        </Button>
+                        <Button variant="outline" onClick={() => window.location.href = '/api/v1/auth/google'}>
+                            Sync Google Calendar
+                        </Button>
+                    </div>
                 </div>
 
                 <div className="space-y-4">

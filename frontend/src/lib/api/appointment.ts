@@ -29,4 +29,9 @@ export const appointmentApi = {
         const response = await api.post<{ room_id: string }>(`/appointments/${id}/start`);
         return response.data;
     },
+
+    createPublicBooking: async (userId: string, data: { guest_name: string; guest_email: string; start_time: string; timezone: string }): Promise<Appointment> => {
+        const response = await api.post<Appointment>(`/users/${userId}/bookings`, data);
+        return response.data;
+    },
 };

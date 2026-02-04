@@ -15,6 +15,7 @@ import { callsApi } from '@/lib/api/calls';
 import { AxiosError } from 'axios';
 import { useBandwidthStats } from '@/hooks/useBandwidthStats';
 import { WaitingParticipant } from '@/types/room';
+import { useToast } from '@/components/ui/use-toast';
 
 function MeetingUI() {
   const { meeting } = useRealtimeKitMeeting();
@@ -45,6 +46,7 @@ export default function RoomPage() {
 
   const { user, isAuthenticated, hasHydrated, initializeAuth } = useAuthStore();
   const [meeting, initMeeting] = useRealtimeKitClient();
+  const { toast } = useToast();
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [isWaiting, setIsWaiting] = useState(false);
   const [isCreator, setIsCreator] = useState(false);
@@ -92,7 +94,11 @@ export default function RoomPage() {
           // If join fails with 404, room doesn't exist
           if (axiosError.response?.status === 404) {
             console.error('Room not found.');
-            alert('This meeting does not exist. Please create a new meeting or use a valid meeting ID.');
+            toast({
+              title: "Meeting Not Found",
+              description: "This meeting does not exist. Please create a new meeting.",
+              variant: "destructive",
+            });
             router.push('/dashboard');
             return;
           }
@@ -140,7 +146,11 @@ export default function RoomPage() {
                   if (!isInWaiting && !isParticipant) {
                     clearInterval(pollInterval);
                     setApprovalPollInterval(null);
-                    alert('The host denied your request to join this meeting.');
+                    toast({
+                      title: "Access Denied",
+                      description: "The host denied your request to join this meeting.",
+                      variant: "destructive",
+                    });
                     router.push('/dashboard');
                   }
                 } catch (roomError) {
@@ -160,7 +170,11 @@ export default function RoomPage() {
         const errorMsg = axiosError.response?.status === 404
           ? 'Meeting not found. Please use a valid meeting ID.'
           : 'Failed to join the meeting. Please try again.';
-        alert(errorMsg);
+        toast({
+          title: "Join Failed",
+          description: errorMsg,
+          variant: "destructive",
+        });
         router.push('/dashboard');
       }
     };

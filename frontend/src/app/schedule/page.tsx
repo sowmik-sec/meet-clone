@@ -8,17 +8,26 @@ import { appointmentApi } from '@/lib/api/appointment';
 import { Appointment } from '@/types/appointment';
 import { useAuth } from '@/hooks/useAuth';
 import { Calendar, Clock, Video, Users, Plus } from 'lucide-react';
+import { useToast } from '@/components/ui/use-toast';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
 
 import { Navigation } from '@/components/ui/Navigation';
 
 export default function SchedulePage() {
-    // ... existing hooks ...
     const router = useRouter();
     const { isAuthenticated, hasHydrated } = useAuth();
+    const { toast } = useToast();
     const [appointments, setAppointments] = useState<Appointment[]>([]);
     const [loading, setLoading] = useState(true);
+    const [cancelId, setCancelId] = useState<string | null>(null);
 
-    // ... existing useEffects ...
     useEffect(() => {
         if (hasHydrated && !isAuthenticated) {
             router.push('/login');
@@ -34,6 +43,11 @@ export default function SchedulePage() {
                 setAppointments(data);
             } catch (error) {
                 console.error('Failed to fetch appointments:', error);
+                toast({
+                    title: "Error",
+                    description: "Failed to load appointments.",
+                    variant: "destructive",
+                });
             } finally {
                 setLoading(false);
             }
@@ -42,24 +56,44 @@ export default function SchedulePage() {
         if (isAuthenticated) {
             fetchAppointments();
         }
-    }, [isAuthenticated]);
+    }, [isAuthenticated, toast]);
 
     const handleStartMeeting = async (id: string) => {
         try {
             const { room_id } = await appointmentApi.startAppointment(id);
+            toast({
+                title: "Starting Meeting",
+                description: "Redirecting you to the room...",
+            });
             router.push(`/room/${room_id}`);
         } catch (error) {
             console.error('Failed to start meeting:', error);
+            toast({
+                title: "Error",
+                description: "Failed to start meeting. Please try again.",
+                variant: "destructive",
+            });
         }
     };
 
-    const handleCancel = async (id: string) => {
-        if (!confirm('Are you sure you want to cancel this appointment?')) return;
+    const confirmCancel = async () => {
+        if (!cancelId) return;
         try {
-            await appointmentApi.cancelAppointment(id);
-            setAppointments(appointments.filter(a => a.id !== id));
+            await appointmentApi.cancelAppointment(cancelId);
+            setAppointments(appointments.filter(a => a.id !== cancelId));
+            toast({
+                title: "Appointment Cancelled",
+                description: "The appointment has been successfully cancelled.",
+            });
         } catch (error) {
             console.error('Failed to cancel appointment:', error);
+            toast({
+                title: "Error",
+                description: "Failed to cancel appointment. Please try again.",
+                variant: "destructive",
+            });
+        } finally {
+            setCancelId(null);
         }
     };
 
@@ -122,13 +156,28 @@ export default function SchedulePage() {
                                         {appt.status === 'confirmed' && (
                                             <Button onClick={() => handleStartMeeting(appt.id)}>Start</Button>
                                         )}
-                                        <Button variant="outline" onClick={() => handleCancel(appt.id)}>Cancel</Button>
+                                        <Button variant="outline" onClick={() => setCancelId(appt.id)}>Cancel</Button>
                                     </div>
                                 </CardContent>
                             </Card>
                         ))
                     )}
                 </div>
+
+                <Dialog open={!!cancelId} onOpenChange={(open) => !open && setCancelId(null)}>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Cancel Appointment</DialogTitle>
+                            <DialogDescription>
+                                Are you sure you want to cancel this appointment? This action cannot be undone.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <DialogFooter>
+                            <Button variant="outline" onClick={() => setCancelId(null)}>Keep Appointment</Button>
+                            <Button variant="destructive" onClick={confirmCancel}>Yes, Cancel</Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
             </div>
         </div>
     );

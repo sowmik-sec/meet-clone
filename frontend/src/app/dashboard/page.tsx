@@ -106,7 +106,11 @@ export default function DashboardPage() {
       setRoomToEnd(null);
     } catch (error) {
       console.error('Failed to end room:', error);
-      alert('Failed to end meeting. Please try again.');
+      toast({
+        title: "Error",
+        description: "Failed to end meeting. Please try again.",
+        variant: "destructive",
+      });
     }
   };
 

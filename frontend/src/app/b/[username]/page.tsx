@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import api from '@/lib/api/client'; // Public client should handle auth gracefully or be separate
+import { appointmentApi } from '@/lib/api/appointment';
 
 interface TimeSlot {
     start: string;
@@ -31,6 +32,7 @@ export default function BookingPage() {
     const username = params.username as string; // Ideally this matches userId or we resolve username -> userId
     // For MVP, assuming username IS userInput ID in the url.
     const userId = username;
+    const router = useRouter();
 
     const { toast } = useToast();
     const [availability, setAvailability] = useState<Availability | null>(null);
@@ -55,9 +57,30 @@ export default function BookingPage() {
     }, [userId]);
 
     const handleBook = async () => {
-        // In Phase 3, this will create an appointment.
-        // For now, just a toast.
-        toast({ title: "Booking Request Sent", description: "This feature will be connected in Phase 3." });
+        if (!selectedSlot || !selectedDate) return;
+        setLoading(true);
+        try {
+            const startDateTime = new Date(`${selectedDate}T${selectedSlot}:00`);
+
+            await appointmentApi.createPublicBooking(userId, {
+                guest_name: name,
+                guest_email: email,
+                start_time: startDateTime.toISOString(),
+                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            });
+
+            toast({ title: "Booking Confirmed", description: "You will receive an email shortly." });
+
+            // Clear form
+            setName('');
+            setEmail('');
+            setSelectedSlot(null);
+        } catch (error) {
+            console.error(error);
+            toast({ title: "Booking Failed", description: "Could not book this slot.", variant: "destructive" });
+        } finally {
+            setLoading(false);
+        }
     };
 
     if (loading) return <div className="p-8 text-center">Loading booking page...</div>;
