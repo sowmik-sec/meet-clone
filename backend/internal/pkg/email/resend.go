@@ -10,6 +10,7 @@ type Service interface {
 	SendAppointmentConfirmation(to string, userName string, title string, time string, link string) error
 	SendAppointmentInvitation(to string, inviterName string, title string, time string, link string) error
 	SendAppointmentCancellation(to string, title string, time string) error
+	SendAppointmentPending(to string, userName string, title string, time string) error
 }
 
 type resendService struct {
@@ -77,6 +78,23 @@ func (s *resendService) SendAppointmentCancellation(to string, title string, tim
 	return err
 }
 
+func (s *resendService) SendAppointmentPending(to string, userName string, title string, time string) error {
+	params := &resend.SendEmailRequest{
+		From:    s.from,
+		To:      []string{to},
+		Subject: fmt.Sprintf("Pending Approval: %s", title),
+		Html: fmt.Sprintf(`
+			<h1>Appointment Pending</h1>
+			<p>Hi %s,</p>
+			<p>Your appointment request for <strong>%s</strong> at <strong>%s</strong> has been received and is pending approval.</p>
+			<p>You will receive another email once the host confirms the appointment.</p>
+		`, userName, title, time),
+	}
+
+	_, err := s.client.Emails.Send(params)
+	return err
+}
+
 // Noop service for local dev without keys
 type noopService struct{}
 
@@ -90,5 +108,9 @@ func (s *noopService) SendAppointmentInvitation(to, name, title, time, link stri
 }
 func (s *noopService) SendAppointmentCancellation(to, title, time string) error {
 	fmt.Printf("[Email Mock] Cancellation sent to %s for %s\n", to, title)
+	return nil
+}
+func (s *noopService) SendAppointmentPending(to, name, title, time string) error {
+	fmt.Printf("[Email Mock] Pending request sent to %s for %s\n", to, title)
 	return nil
 }

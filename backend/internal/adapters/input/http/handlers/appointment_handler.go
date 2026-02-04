@@ -153,3 +153,22 @@ func (h *AppointmentHandler) CreatePublicBooking(w http.ResponseWriter, r *http.
 
 	respondJSON(w, appt, http.StatusCreated)
 }
+
+func (h *AppointmentHandler) GetBookedSlots(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	hostID := vars["userId"]
+	date := r.URL.Query().Get("date")
+
+	if date == "" {
+		respondError(w, errors.NewBadRequestError("date is required", nil), http.StatusBadRequest)
+		return
+	}
+
+	slots, err := h.service.GetBookedSlots(r.Context(), hostID, date)
+	if err != nil {
+		respondError(w, errors.NewInternalError("failed to get booked slots", err), http.StatusInternalServerError)
+		return
+	}
+
+	respondJSON(w, slots, http.StatusOK)
+}

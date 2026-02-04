@@ -7,17 +7,20 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/meet-clone/backend/internal/adapters/input/http/middleware"
+	"github.com/meet-clone/backend/internal/core/domain/appointment"
 	"github.com/meet-clone/backend/internal/core/domain/room"
 	"github.com/meet-clone/backend/internal/pkg/errors"
 )
 
 type RoomHandler struct {
-	roomService room.Service
+	roomService        room.Service
+	appointmentService appointment.Service
 }
 
-func NewRoomHandler(roomService room.Service) *RoomHandler {
+func NewRoomHandler(roomService room.Service, appointmentService appointment.Service) *RoomHandler {
 	return &RoomHandler{
-		roomService: roomService,
+		roomService:        roomService,
+		appointmentService: appointmentService,
 	}
 }
 
@@ -90,6 +93,33 @@ func (h *RoomHandler) JoinRoom(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, errors.NewValidationError("invalid request body"), http.StatusBadRequest)
 		return
+	}
+
+	// Check Access Control
+	appt, _ := h.appointmentService.GetAppointmentByRoomID(r.Context(), roomID)
+	// If it's an appointment room, validate host/guest and time
+	if appt != nil {
+		if appt.HostID != claims.UserID && appt.GuestID != claims.UserID {
+			// Not host or guest. Check if public participants are allowed?
+			// For now, strict: only host and guest.
+			// Ideally we should check if they are already approved participants in the room too.
+			respondError(w, errors.NewForbiddenError("access denied: appointment restricted"), http.StatusForbidden)
+			return
+		}
+
+		// Time validation
+		// Allow 15 mins before start, until end time
+		/*
+			now := time.Now()
+			windowStart := appt.StartTime.Add(-15 * time.Minute)
+			if now.Before(windowStart) {
+				respondError(w, errors.NewForbiddenError("meeting has not started yet"), http.StatusForbidden)
+				return
+			}
+			if now.After(appt.EndTime) {
+			    // Maybe allow a grace period?
+			}
+		*/
 	}
 
 	rm, err := h.roomService.JoinRoom(r.Context(), roomID, claims.UserID, req.UserName, req.Avatar)

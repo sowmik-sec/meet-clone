@@ -90,7 +90,7 @@ func main() {
 
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(userService, jwtService, cfg, googleService)
-	roomHandler := handlers.NewRoomHandler(roomService)
+	roomHandler := handlers.NewRoomHandler(roomService, appointmentService)
 	chatHandler := handlers.NewChatHandler(chatService)
 	callsHandler := handlers.NewCallsHandler(callsService, roomService)
 	bandwidthHandler := handlers.NewBandwidthHandler(bandwidthService)

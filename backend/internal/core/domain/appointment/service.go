@@ -49,6 +49,8 @@ type Service interface {
 	ConfirmAppointment(ctx context.Context, id, hostID string) error
 	StartAppointment(ctx context.Context, id, userID string) (string, error) // Returns room ID
 	CreatePublicBooking(ctx context.Context, hostID string, req CreatePublicBookingRequest) (*Appointment, error)
+	GetBookedSlots(ctx context.Context, userID string, date string) ([][]string, error)
+	GetAppointmentByRoomID(ctx context.Context, roomID string) (*Appointment, error)
 }
 
 // Service Implementation
@@ -219,6 +221,17 @@ func (s *service) StartAppointment(ctx context.Context, id, userID string) (stri
 		return "", errors.New("only host can start the meeting")
 	}
 
+	// Check time window (allow start 15 mins before to end time)
+	now := time.Now()
+	windowStart := appt.StartTime.Add(-15 * time.Minute)
+
+	if now.Before(windowStart) {
+		return "", errors.New("meeting cannot be started before scheduled time")
+	}
+	if now.After(appt.EndTime) {
+		return "", errors.New("meeting has already ended")
+	}
+
 	// Create room if not exists
 	if appt.RoomID == "" {
 		roomType := room.RoomTypeMeeting
@@ -270,14 +283,21 @@ func (s *service) CreatePublicBooking(ctx context.Context, hostID string, req Cr
 		endTime,
 	)
 	appt.ID = uuid.New().String()
-	appt.Status = StatusConfirmed // Auto-confirm public bookings for MVP
+	appt.Status = StatusPending // Require host approval
 
 	if err := s.repo.Create(ctx, appt); err != nil {
 		return nil, err
 	}
 
-	// Send Email Notifications (Host + Guest)
-	s.emailService.SendAppointmentConfirmation(req.GuestEmail, req.GuestName, appt.Title, appt.StartTime.String(), "http://localhost:3000/appointments/"+appt.ID)
+	s.emailService.SendAppointmentPending(req.GuestEmail, req.GuestName, appt.Title, appt.StartTime.String())
 
 	return appt, nil
+}
+
+func (s *service) GetBookedSlots(ctx context.Context, userID string, date string) ([][]string, error) {
+	return s.repo.GetBookedSlots(ctx, userID, date)
+}
+
+func (s *service) GetAppointmentByRoomID(ctx context.Context, roomID string) (*Appointment, error) {
+	return s.repo.FindByRoomID(ctx, roomID)
 }

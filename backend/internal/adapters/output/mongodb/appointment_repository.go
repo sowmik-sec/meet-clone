@@ -124,3 +124,57 @@ func (r *appointmentRepository) HasConflict(ctx context.Context, userID string, 
 
 	return count > 0, nil
 }
+
+func (r *appointmentRepository) GetBookedSlots(ctx context.Context, userID string, date string) ([][]string, error) {
+	// Parse date (YYYY-MM-DD)
+	startOfDay, err := time.Parse("2006-01-02", date)
+	if err != nil {
+		return nil, err
+	}
+	endOfDay := startOfDay.Add(24 * time.Hour)
+
+	query := bson.M{
+		"$or": []bson.M{
+			{"host_id": userID},
+			{"guest_id": userID},
+		},
+		"status": appointment.StatusConfirmed,
+		"start_time": bson.M{
+			"$gte": startOfDay,
+			"$lt":  endOfDay,
+		},
+	}
+
+	opts := options.Find().SetSort(bson.D{{Key: "start_time", Value: 1}})
+	cursor, err := r.collection.Find(ctx, query, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var appointments []appointment.Appointment
+	if err = cursor.All(ctx, &appointments); err != nil {
+		return nil, err
+	}
+
+	var slots [][]string
+	for _, appt := range appointments {
+		slots = append(slots, []string{
+			appt.StartTime.Format(time.RFC3339),
+			appt.EndTime.Format(time.RFC3339),
+		})
+	}
+	return slots, nil
+}
+
+func (r *appointmentRepository) FindByRoomID(ctx context.Context, roomID string) (*appointment.Appointment, error) {
+	var appt appointment.Appointment
+	err := r.collection.FindOne(ctx, bson.M{"room_id": roomID}).Decode(&appt)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &appt, nil
+}
