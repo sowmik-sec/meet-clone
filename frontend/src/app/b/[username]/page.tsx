@@ -1,296 +1,126 @@
 "use client";
 
-import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { useToast } from '@/components/ui/use-toast';
-import api from '@/lib/api/client';
-import { appointmentApi } from '@/lib/api/appointment';
-import { HostInfoCard } from '@/components/booking/host-info-card';
-import { BookingCalendar } from '@/components/booking/booking-calendar';
-import { TimeSlotGrid } from '@/components/booking/time-slot-grid';
-import { ArrowLeft, Calendar as CalendarIcon, Clock } from 'lucide-react';
-import { format } from 'date-fns';
+import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
+import Link from "next/link";
+import { Clock, ChevronRight, Video } from "lucide-react";
 
-interface TimeSlot {
-    start: string;
-    end: string;
-}
+import { eventTypesApi } from "@/lib/api/event-types";
+import { EventType } from "@/types/event-type";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Skeleton } from "../../../components/ui/skeleton";
 
-interface DayAvailability {
-    day: number;
-    is_enabled: boolean;
-    slots: TimeSlot[];
-}
-
-interface Availability {
-    user_id: string;
-    schedule: DayAvailability[];
-    timezone: string;
-}
-
-export default function BookingPage() {
+export default function BookingProfilePage() {
     const params = useParams();
-    const username = params.username as string;
-    const userId = username;
-
-    const { toast } = useToast();
-    const [availability, setAvailability] = useState<Availability | null>(null);
-    const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
-    const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
-    const [name, setName] = useState('');
-    const [email, setEmail] = useState('');
+    const username = params.username as string; // This is actually userId currently
+    const [eventTypes, setEventTypes] = useState<EventType[]>([]);
     const [loading, setLoading] = useState(true);
-    const [bookedSlots, setBookedSlots] = useState<string[][]>([]);
-
-    // View state: 'calendar' or 'form'
-    const [view, setView] = useState<'calendar' | 'form'>('calendar');
+    const [error, setError] = useState(false);
 
     useEffect(() => {
-        const fetchBookedSlots = async () => {
-            if (!userId || !selectedDate) return;
+        const fetchEventTypes = async () => {
             try {
-                const dateStr = format(selectedDate, 'yyyy-MM-dd');
-                const slots = await appointmentApi.getBookedSlots(userId, dateStr);
-                setBookedSlots(slots);
-            } catch (error) {
-                console.error('Failed to fetch booked slots', error);
-            }
-        };
-        fetchBookedSlots();
-    }, [userId, selectedDate]);
-
-    const getAvailableSlots = () => {
-        if (!availability || !selectedDate) return [];
-
-        const date = selectedDate;
-        const dayIndex = date.getDay(); // 0 = Sunday
-        const dayConfig = availability.schedule.find(d => d.day === dayIndex);
-
-        if (!dayConfig || !dayConfig.is_enabled) return [];
-
-        const slots: string[] = [];
-        const dateStr = format(date, 'yyyy-MM-dd');
-
-        dayConfig.slots.forEach(slotRange => {
-            const [startHour, startMin] = slotRange.start.split(':').map(Number);
-            const [endHour, endMin] = slotRange.end.split(':').map(Number);
-
-            let current = new Date(dateStr + 'T00:00:00');
-            current.setHours(startHour, startMin, 0, 0);
-
-            let end = new Date(dateStr + 'T00:00:00');
-            end.setHours(endHour, endMin, 0, 0);
-
-            const now = new Date();
-            const isToday = date.toDateString() === now.toDateString();
-
-            while (current < end) {
-                const nextSlot = new Date(current.getTime() + 60 * 60 * 1000);
-
-                // Prevent past time selection if date is today
-                if (isToday && current <= now) {
-                    current = nextSlot;
-                    continue;
-                }
-
-                if (nextSlot <= end) {
-                    const timeString = current.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-                    if (!slots.includes(timeString)) {
-                        slots.push(timeString);
-                    }
-                }
-                current = nextSlot;
-            }
-        });
-
-        return slots;
-    };
-
-    const isSlotAvailable = (timeStr: string, date: Date) => {
-        const dateStr = format(date, 'yyyy-MM-dd');
-        const slotStart = new Date(`${dateStr}T${timeStr}:00`);
-        const slotEnd = new Date(slotStart.getTime() + 60 * 60 * 1000); // 1 hour duration
-
-        return !bookedSlots.some(([start, end]) => {
-            const bookedStart = new Date(start);
-            const bookedEnd = new Date(end);
-            return (slotStart < bookedEnd && slotEnd > bookedStart);
-        });
-    };
-
-    useEffect(() => {
-        const fetchAvailability = async () => {
-            try {
-                const res = await api.get<Availability>(`/users/${userId}/availability`);
-                setAvailability(res.data);
-            } catch (error) {
-                console.error('Failed to fetch availability', error);
+                if (!username) return;
+                const data = await eventTypesApi.listPublic(username);
+                setEventTypes(data.filter(et => et.is_active));
+            } catch (err) {
+                console.error("Failed to load event types", err);
+                setError(true);
             } finally {
                 setLoading(false);
             }
         };
-        if (userId) fetchAvailability();
-    }, [userId]);
 
-    const handleSlotSelect = (slot: string) => {
-        setSelectedSlot(slot);
-        setView('form');
-    };
+        fetchEventTypes();
+    }, [username]);
 
-    const handleBackToCalendar = () => {
-        setView('calendar');
-        setSelectedSlot(null);
-    };
-
-    const handleBook = async () => {
-        if (!selectedSlot || !selectedDate) return;
-        setLoading(true);
-        try {
-            const dateStr = format(selectedDate, 'yyyy-MM-dd');
-            const startDateTime = new Date(`${dateStr}T${selectedSlot}:00`);
-
-            await appointmentApi.createPublicBooking(userId, {
-                guest_name: name,
-                guest_email: email,
-                start_time: startDateTime.toISOString(),
-                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-            });
-
-            toast({ title: "Booking Confirmed", description: "You will receive an email shortly." });
-
-            // Reset
-            setName('');
-            setEmail('');
-            setSelectedSlot(null);
-            setView('calendar');
-            setSelectedDate(undefined);
-        } catch (error) {
-            console.error(error);
-            toast({ title: "Booking Failed", description: "Could not book this slot.", variant: "destructive" });
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    if (loading) return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50">
-            <div className="animate-pulse flex flex-col items-center">
-                <div className="h-12 w-12 bg-gray-200 rounded-full mb-4"></div>
-                <div className="h-4 w-32 bg-gray-200 rounded"></div>
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+                <div className="max-w-xl w-full space-y-4">
+                    <div className="flex justify-center mb-8">
+                        <Skeleton className="h-20 w-20 rounded-full" />
+                    </div>
+                    <Skeleton className="h-32 w-full rounded-lg" />
+                    <Skeleton className="h-32 w-full rounded-lg" />
+                </div>
             </div>
-        </div>
-    );
+        );
+    }
 
-    if (!availability) return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50">
-            <div className="text-center">
-                <h2 className="text-xl font-semibold text-gray-900">User not found</h2>
-                <p className="text-gray-500">This user hasn't set up their availability yet.</p>
+    if (error || eventTypes.length === 0) {
+        return (
+            <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+                <Card className="max-w-md w-full text-center p-8">
+                    <CardTitle className="text-xl mb-2">No event types found</CardTitle>
+                    <CardDescription>
+                        This user hasn't set up any public event types yet.
+                    </CardDescription>
+                </Card>
             </div>
-        </div>
-    );
+        );
+    }
 
     return (
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-            <Card className="w-full max-w-5xl shadow-xl overflow-hidden min-h-[600px] flex md:flex-row flex-col">
-                {/* Host Sidebar - Always visible on desktop */}
-                <div className="w-full md:w-1/3 bg-white border-b md:border-b-0 md:border-r border-gray-100">
-                    <HostInfoCard
-                        hostId={userId}
-                        hostName={userId} // TODO: Fetch real name
-                        description="Welcome to my scheduling page. Please follow the instructions to add an event to my calendar."
-                    />
+        <div className="min-h-screen bg-gray-50 flex flex-col">
+            <header className="bg-white border-b sticky top-0 z-10">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+                    <div className="flex items-center gap-2 font-bold text-xl text-blue-600">
+                        <Video className="w-6 h-6" />
+                        <span>Meet Clone</span>
+                    </div>
+                    {/* Optional: Add Login link here later if needed */}
                 </div>
+            </header>
+            <div className="flex-1 flex flex-col items-center py-12 px-4 sm:px-6 lg:px-8">
+                <div className="w-full max-w-2xl space-y-8">
+                    <div className="text-center">
+                        <Avatar className="h-24 w-24 mx-auto border-4 border-white shadow-sm">
+                            <AvatarImage src={`https://ui-avatars.com/api/?name=User&background=random`} />
+                            <AvatarFallback>U</AvatarFallback>
+                        </Avatar>
+                        <h1 className="mt-4 text-2xl font-bold text-gray-900">Book a Meeting</h1>
+                        <p className="mt-2 text-gray-600">
+                            Select an event type to schedule a time.
+                        </p>
+                    </div>
 
-                {/* Main Content Area */}
-                <div className="flex-1 bg-white p-6 md:p-8">
-                    {view === 'calendar' ? (
-                        <div className="h-full flex flex-col md:flex-row gap-8 animate-in fade-in duration-500">
-                            <div className="flex-1 flex flex-col items-center">
-                                <h3 className="text-lg font-semibold mb-4 self-start">Select a Date</h3>
-                                <BookingCalendar
-                                    selectedDate={selectedDate}
-                                    onSelectDate={setSelectedDate}
-                                />
-                            </div>
-
-                            <div className={`w-full md:w-64 border-l pl-0 md:pl-8 transition-all duration-300 ${!selectedDate ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
-                                <h3 className="text-lg font-semibold mb-4">Available Time</h3>
-                                <TimeSlotGrid
-                                    date={selectedDate}
-                                    slots={getAvailableSlots()}
-                                    selectedSlot={selectedSlot}
-                                    onSelectSlot={handleSlotSelect}
-                                    isSlotAvailable={isSlotAvailable}
-                                />
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="h-full max-w-md mx-auto animate-in slide-in-from-right-8 duration-300">
-                            <Button
-                                variant="ghost"
-                                onClick={handleBackToCalendar}
-                                className="mb-6 -ml-4 text-gray-500 hover:text-gray-900"
+                    <div className="grid gap-4">
+                        {eventTypes.map((eventType) => (
+                            <Link
+                                key={eventType.id}
+                                href={`/b/${username}/${eventType.slug}`}
+                                className="block group"
                             >
-                                <ArrowLeft className="w-4 h-4 mr-2" />
-                                Back to Calendar
-                            </Button>
-
-                            <div className="mb-8 p-4 bg-gray-50 rounded-lg border border-gray-100">
-                                <h3 className="font-semibold text-gray-900 mb-2">Booking Summary</h3>
-                                <div className="space-y-2 text-sm text-gray-600">
-                                    <div className="flex items-center gap-2">
-                                        <CalendarIcon className="w-4 h-4" />
-                                        <span>{selectedDate && format(selectedDate, 'EEEE, MMMM d, yyyy')}</span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <Clock className="w-4 h-4" />
-                                        <span>{selectedSlot} - {selectedSlot && format(new Date(`2000-01-01T${selectedSlot}:00`).getTime() + 60 * 60 * 1000, 'HH:mm')}</span>
-                                    </div>
-                                    <div className="text-xs text-gray-400 mt-2 pt-2 border-t">
-                                        Timezone: {Intl.DateTimeFormat().resolvedOptions().timeZone}
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="space-y-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="name">Your Name</Label>
-                                    <Input
-                                        id="name"
-                                        value={name}
-                                        onChange={(e) => setName(e.target.value)}
-                                        placeholder="John Doe"
-                                        className="h-11"
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="email">Email Address</Label>
-                                    <Input
-                                        id="email"
-                                        type="email"
-                                        value={email}
-                                        onChange={(e) => setEmail(e.target.value)}
-                                        placeholder="john@example.com"
-                                        className="h-11"
-                                    />
-                                </div>
-                                <Button
-                                    className="w-full h-11 mt-4 text-base"
-                                    disabled={!name || !email}
-                                    onClick={handleBook}
-                                >
-                                    Confirm Booking
-                                </Button>
-                            </div>
-                        </div>
-                    )}
+                                <Card className="transition-all duration-200 hover:shadow-md hover:border-blue-500/50 cursor-pointer">
+                                    <CardContent className="p-6 flex items-center justify-between">
+                                        <div className="space-y-1">
+                                            <div className="flex items-center gap-2">
+                                                <div
+                                                    className="w-3 h-3 rounded-full"
+                                                    style={{ backgroundColor: eventType.color || '#3b82f6' }}
+                                                />
+                                                <h3 className="font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
+                                                    {eventType.title}
+                                                </h3>
+                                            </div>
+                                            <p className="text-sm text-gray-500 line-clamp-1">
+                                                {eventType.description || "No description"}
+                                            </p>
+                                            <div className="flex items-center text-sm text-gray-500 mt-2">
+                                                <Clock className="w-4 h-4 mr-1.5" />
+                                                {eventType.duration} mins
+                                            </div>
+                                        </div>
+                                        <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-blue-500 transform group-hover:translate-x-1 transition-all" />
+                                    </CardContent>
+                                </Card>
+                            </Link>
+                        ))}
+                    </div>
                 </div>
-            </Card>
+            </div>
         </div>
     );
 }

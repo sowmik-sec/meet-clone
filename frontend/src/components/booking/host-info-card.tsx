@@ -7,9 +7,10 @@ interface HostInfoProps {
     hostName?: string;
     duration?: number;
     description?: string;
+    title?: string;
 }
 
-export function HostInfoCard({ hostId, hostName, duration = 60, description }: HostInfoProps) {
+export function HostInfoCard({ hostId, hostName, duration = 60, description, title }: HostInfoProps) {
     return (
         <div className="border-r h-full p-6 flex flex-col gap-6">
             <div className="flex flex-col gap-4">
@@ -20,6 +21,7 @@ export function HostInfoCard({ hostId, hostName, duration = 60, description }: H
                 <div>
                     <h2 className="text-muted-foreground text-sm font-medium uppercase tracking-wide">Host</h2>
                     <h1 className="text-2xl font-bold mt-1 text-foreground">{hostName || hostId}</h1>
+                    {title && <h2 className="text-xl font-medium mt-1 text-gray-700">{title}</h2>}
                 </div>
             </div>
 
