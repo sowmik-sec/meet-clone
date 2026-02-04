@@ -21,6 +21,7 @@ type Router struct {
 	bandwidthHandler    *httpHandlers.BandwidthHandler
 	appointmentHandler  *httpHandlers.AppointmentHandler
 	availabilityHandler *httpHandlers.AvailabilityHandler
+	eventTypeHandler    *httpHandlers.EventTypeHandler
 	wsHandler           *websocket.Handler
 	authMiddleware      *middleware.AuthMiddleware
 	config              *config.Config
@@ -34,6 +35,7 @@ func NewRouter(
 	bandwidthHandler *httpHandlers.BandwidthHandler,
 	appointmentHandler *httpHandlers.AppointmentHandler,
 	availabilityHandler *httpHandlers.AvailabilityHandler,
+	eventTypeHandler *httpHandlers.EventTypeHandler,
 	wsHandler *websocket.Handler,
 	authMiddleware *middleware.AuthMiddleware,
 	cfg *config.Config,
@@ -47,6 +49,7 @@ func NewRouter(
 		bandwidthHandler:    bandwidthHandler,
 		appointmentHandler:  appointmentHandler,
 		availabilityHandler: availabilityHandler,
+		eventTypeHandler:    eventTypeHandler,
 		wsHandler:           wsHandler,
 		authMiddleware:      authMiddleware,
 		config:              cfg,
@@ -139,6 +142,15 @@ func (r *Router) Setup() http.Handler {
 	// Important: This should verify user exists. For MVP, we trust ID.
 	api.HandleFunc("/users/{userId}/availability", r.availabilityHandler.GetPublicAvailability).Methods("GET")
 	api.HandleFunc("/users/{userId}/bookings", r.appointmentHandler.CreatePublicBooking).Methods("POST")
+	api.HandleFunc("/users/{userId}/event-types", r.eventTypeHandler.GetPublicEventTypes).Methods("GET")
+
+	// Protected routes - Event Types
+	eventTypes := api.PathPrefix("/event-types").Subrouter()
+	eventTypes.Use(r.authMiddleware.Authenticate)
+	eventTypes.HandleFunc("", r.eventTypeHandler.ListEventTypes).Methods("GET")
+	eventTypes.HandleFunc("", r.eventTypeHandler.CreateEventType).Methods("POST")
+	eventTypes.HandleFunc("/{id}", r.eventTypeHandler.UpdateEventType).Methods("PUT")
+	eventTypes.HandleFunc("/{id}", r.eventTypeHandler.DeleteEventType).Methods("DELETE")
 
 	// Health check
 	r.router.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
