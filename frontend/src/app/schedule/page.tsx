@@ -37,6 +37,7 @@ export default function SchedulePage() {
     const [appointments, setAppointments] = useState<Appointment[]>([]);
     const [loading, setLoading] = useState(true);
     const [cancelId, setCancelId] = useState<string | null>(null);
+    const [activeTab, setActiveTab] = useState<'upcoming' | 'pending' | 'cancelled'>('upcoming');
 
     useEffect(() => {
         if (hasHydrated && !isAuthenticated) {
@@ -46,9 +47,13 @@ export default function SchedulePage() {
 
     useEffect(() => {
         const fetchAppointments = async () => {
+            setLoading(true);
             try {
+                // Fetch all recent appointments
+                // In a real app, you might want to filter by status on the backend
+                // For now, we'll fetch all future/recent ones and filter client-side for the tabs
                 const data = await appointmentApi.getAppointments({
-                    start_time_after: new Date().toISOString(),
+                    start_time_after: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), // Get from 24h ago
                 });
                 setAppointments(data);
             } catch (error) {
@@ -68,6 +73,14 @@ export default function SchedulePage() {
         }
     }, [isAuthenticated, toast]);
 
+    const filteredAppointments = appointments.filter(appt => {
+        if (activeTab === 'cancelled') return appt.status === 'cancelled';
+        if (activeTab === 'pending') return appt.status === 'pending';
+        // Upcoming defaults to confirmed
+        return appt.status === 'confirmed';
+    });
+
+
     const handleStartMeeting = async (id: string) => {
         try {
             const { room_id } = await appointmentApi.startAppointment(id);
@@ -86,11 +99,34 @@ export default function SchedulePage() {
         }
     };
 
+    const handleConfirm = async (id: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        try {
+            await appointmentApi.confirmAppointment(id);
+            setAppointments(appointments.map(a =>
+                a.id === id ? { ...a, status: 'confirmed' } : a
+            ));
+            toast({
+                title: "Appointment Confirmed",
+                description: "You have approved this appointment request.",
+            });
+        } catch (error) {
+            console.error('Failed to confirm appointment:', error);
+            toast({
+                title: "Error",
+                description: "Failed to confirm appointment. Please try again.",
+                variant: "destructive",
+            });
+        }
+    };
+
     const confirmCancel = async () => {
         if (!cancelId) return;
         try {
             await appointmentApi.cancelAppointment(cancelId);
-            setAppointments(appointments.filter(a => a.id !== cancelId));
+            setAppointments(appointments.map(a =>
+                a.id === cancelId ? { ...a, status: 'cancelled' } : a
+            ));
             toast({
                 title: "Appointment Cancelled",
                 description: "The appointment has been successfully cancelled.",
@@ -126,15 +162,36 @@ export default function SchedulePage() {
                     </Button>
                 </div>
 
+                <div className="flex space-x-2 mb-6 border-b">
+                    <button
+                        className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'upcoming' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                        onClick={() => setActiveTab('upcoming')}
+                    >
+                        Upcoming
+                    </button>
+                    <button
+                        className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'pending' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                        onClick={() => setActiveTab('pending')}
+                    >
+                        Pending
+                    </button>
+                    <button
+                        className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'cancelled' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                        onClick={() => setActiveTab('cancelled')}
+                    >
+                        Cancelled
+                    </button>
+                </div>
+
                 <div className="space-y-4">
-                    {appointments.length === 0 ? (
+                    {filteredAppointments.length === 0 ? (
                         <Card>
                             <CardContent className="p-8 text-center text-gray-500">
-                                No upcoming appointments found.
+                                No {activeTab} appointments found.
                             </CardContent>
                         </Card>
                     ) : (
-                        appointments.map((appt) => (
+                        filteredAppointments.map((appt) => (
                             <Card key={appt.id}>
                                 <CardContent className="p-6 flex justify-between items-center">
                                     <div>
@@ -165,6 +222,14 @@ export default function SchedulePage() {
                                     <div className="flex gap-2">
                                         {appt.status === 'confirmed' && doesMeetingAllowStart(appt.start_time, appt.end_time) && (
                                             <Button onClick={() => handleStartMeeting(appt.id)}>Start</Button>
+                                        )}
+                                        {appt.status === 'pending' && (
+                                            <Button
+                                                className="bg-green-600 hover:bg-green-700"
+                                                onClick={(e) => handleConfirm(appt.id, e)}
+                                            >
+                                                Approve
+                                            </Button>
                                         )}
                                         {appt.status !== 'cancelled' && (
                                             <Button variant="outline" onClick={() => setCancelId(appt.id)}>Cancel</Button>
