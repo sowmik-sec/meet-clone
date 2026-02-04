@@ -56,6 +56,43 @@ export default function BookingPage() {
         fetchBookedSlots();
     }, [userId, selectedDate]);
 
+
+
+    const getAvailableSlots = () => {
+        if (!availability || !selectedDate) return [];
+
+        const date = new Date(selectedDate);
+        // getDay() returns 0 for Sunday
+        const dayIndex = date.getDay();
+
+        const dayConfig = availability.schedule.find(d => d.day === dayIndex);
+        if (!dayConfig || !dayConfig.is_enabled) return [];
+
+        const slots: string[] = [];
+
+        dayConfig.slots.forEach(slotRange => {
+            const [startHour, startMin] = slotRange.start.split(':').map(Number);
+            const [endHour, endMin] = slotRange.end.split(':').map(Number);
+
+            let current = new Date(date);
+            current.setHours(startHour, startMin, 0, 0);
+
+            let end = new Date(date);
+            end.setHours(endHour, endMin, 0, 0);
+
+            while (current < end) {
+                const nextSlot = new Date(current.getTime() + 60 * 60 * 1000);
+                if (nextSlot <= end) {
+                    const timeString = current.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+                    slots.push(timeString);
+                }
+                current = nextSlot;
+            }
+        });
+
+        return slots;
+    };
+
     const isSlotAvailable = (timeStr: string) => {
         if (!selectedDate) return false;
         const slotStart = new Date(`${selectedDate}T${timeStr}:00`);
@@ -126,20 +163,24 @@ export default function BookingPage() {
 
                         {selectedDate && (
                             <div className="grid grid-cols-2 gap-2 mt-4">
-                                {['09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00'].map(time => {
-                                    const available = isSlotAvailable(time);
-                                    return (
-                                        <Button
-                                            key={time}
-                                            variant={selectedSlot === time ? 'default' : 'outline'}
-                                            onClick={() => available && setSelectedSlot(time)}
-                                            disabled={!available}
-                                            className={!available ? 'opacity-50 cursor-not-allowed bg-gray-100 text-gray-400' : ''}
-                                        >
-                                            {available ? time : 'Booked'}
-                                        </Button>
-                                    );
-                                })}
+                                {getAvailableSlots().length === 0 ? (
+                                    <div className="col-span-2 text-center text-gray-500 py-4">No slots available for this day.</div>
+                                ) : (
+                                    getAvailableSlots().map(time => {
+                                        const available = isSlotAvailable(time);
+                                        return (
+                                            <Button
+                                                key={time}
+                                                variant={selectedSlot === time ? 'default' : 'outline'}
+                                                onClick={() => available && setSelectedSlot(time)}
+                                                disabled={!available}
+                                                className={!available ? 'opacity-50 cursor-not-allowed bg-gray-100 text-gray-400' : ''}
+                                            >
+                                                {available ? time : 'Booked'}
+                                            </Button>
+                                        );
+                                    })
+                                )}
                             </div>
                         )}
                     </div>

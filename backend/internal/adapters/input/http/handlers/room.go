@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 
@@ -109,7 +110,7 @@ func (h *RoomHandler) JoinRoom(w http.ResponseWriter, r *http.Request) {
 			// Not host or guest. Check if public participants are allowed?
 			// For now, strict: only host and guest.
 			// Ideally we should check if they are already approved participants in the room too.
-			respondError(w, errors.NewForbiddenError("access denied: appointment restricted - you are not the host or guest"), http.StatusForbidden)
+			respondError(w, errors.NewForbiddenError(fmt.Sprintf("access denied: host=%s, guestID=%s, userID=%s, guestEmail=%s, userEmail=%s", appt.HostID, appt.GuestID, claims.UserID, appt.GuestID, claims.Email)), http.StatusForbidden)
 			return
 		}
 
