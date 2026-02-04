@@ -99,11 +99,17 @@ func (h *RoomHandler) JoinRoom(w http.ResponseWriter, r *http.Request) {
 	appt, _ := h.appointmentService.GetAppointmentByRoomID(r.Context(), roomID)
 	// If it's an appointment room, validate host/guest and time
 	if appt != nil {
-		if appt.HostID != claims.UserID && appt.GuestID != claims.UserID {
+		// Allow if User is Host OR User is Guest (by ID) OR User is Guest (by Email)
+		// Public bookings store email in GuestID
+		isHost := appt.HostID == claims.UserID
+		isGuestByID := appt.GuestID == claims.UserID
+		isGuestByEmail := appt.GuestID == claims.Email
+
+		if !isHost && !isGuestByID && !isGuestByEmail {
 			// Not host or guest. Check if public participants are allowed?
 			// For now, strict: only host and guest.
 			// Ideally we should check if they are already approved participants in the room too.
-			respondError(w, errors.NewForbiddenError("access denied: appointment restricted"), http.StatusForbidden)
+			respondError(w, errors.NewForbiddenError("access denied: appointment restricted - you are not the host or guest"), http.StatusForbidden)
 			return
 		}
 
