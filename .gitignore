@@ -69,3 +69,8 @@ docker-compose.override.yml
 
 # Go Binaries
 backend/main
+.agent/
+.agents/
+.claude/
+.codex/
+.opencode/
