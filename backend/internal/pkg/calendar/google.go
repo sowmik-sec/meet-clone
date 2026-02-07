@@ -39,7 +39,7 @@ func NewGoogleService(clientID, clientSecret, redirectURL string) Service {
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
 		RedirectURL:  redirectURL,
-		Scopes:       []string{calendar.CalendarEventsScope},
+		Scopes:       []string{calendar.CalendarScope},
 		Endpoint:     google.Endpoint,
 	}
 	return &googleService{config: config}

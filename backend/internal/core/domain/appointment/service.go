@@ -12,6 +12,7 @@ import (
 	"github.com/meet-clone/backend/internal/core/domain/user"
 	"github.com/meet-clone/backend/internal/pkg/calendar"
 	"github.com/meet-clone/backend/internal/pkg/email"
+	"github.com/meet-clone/backend/internal/pkg/logger"
 	"golang.org/x/oauth2"
 )
 
@@ -402,7 +403,7 @@ func (s *service) GetBookedSlots(ctx context.Context, userID string, date string
 				})
 			}
 		} else {
-			// logger.Error("Failed to fetch Google Calendar busy times: %v", err)
+			logger.Error.Printf("Failed to fetch Google Calendar busy times: %v", err)
 		}
 	}
 

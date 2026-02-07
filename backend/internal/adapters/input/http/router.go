@@ -142,6 +142,7 @@ func (r *Router) Setup() http.Handler {
 	// Important: This should verify user exists. For MVP, we trust ID.
 	api.HandleFunc("/users/{userId}/availability", r.availabilityHandler.GetPublicAvailability).Methods("GET")
 	api.HandleFunc("/users/{userId}/bookings", r.appointmentHandler.CreatePublicBooking).Methods("POST")
+	api.HandleFunc("/users/{userId}/booked-slots", r.appointmentHandler.GetBookedSlots).Methods("GET")
 	api.HandleFunc("/users/{userId}/event-types", r.eventTypeHandler.GetPublicEventTypes).Methods("GET")
 
 	// Protected routes - Event Types
