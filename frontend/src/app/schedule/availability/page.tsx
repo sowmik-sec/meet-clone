@@ -106,7 +106,7 @@ export default function AvailabilityPage() {
                             {copied ? <Check className="w-4 h-4 mr-2" /> : <Copy className="w-4 h-4 mr-2" />}
                             Copy Booking Link
                         </Button>
-                        <Button variant="outline" onClick={() => window.location.href = '/api/v1/auth/google'}>
+                        <Button variant="outline" onClick={() => window.location.href = `${process.env.NEXT_PUBLIC_API_URL}/auth/google`}>
                             Sync Google Calendar
                         </Button>
                     </div>
