@@ -10,6 +10,9 @@ import { useToast } from '@/components/ui/use-toast';
 import { Navigation } from '@/components/ui/Navigation';
 import { Copy, Check } from 'lucide-react';
 
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+
 interface TimeSlot {
     start: string;
     end: string;
@@ -25,6 +28,7 @@ interface Availability {
     user_id: string;
     schedule: DayAvailability[];
     timezone: string;
+    is_accepting_bookings: boolean;
 }
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -93,7 +97,17 @@ export default function AvailabilityPage() {
             <div className="max-w-4xl mx-auto px-4 py-8">
                 <div className="flex justify-between items-center mb-6">
                     <h1 className="text-2xl font-bold">Set Your Availability</h1>
-                    <Button onClick={handleSave}>Save Changes</Button>
+                    <div className="flex items-center gap-4">
+                        <div className="flex items-center space-x-2">
+                            <Switch
+                                id="accept-bookings"
+                                checked={availability?.is_accepting_bookings ?? true}
+                                onCheckedChange={(checked) => setAvailability(prev => prev ? { ...prev, is_accepting_bookings: checked } : null)}
+                            />
+                            <Label htmlFor="accept-bookings">Accept new bookings</Label>
+                        </div>
+                        <Button onClick={handleSave}>Save Changes</Button>
+                    </div>
                 </div>
 
                 <div className="flex justify-between items-center mb-6">

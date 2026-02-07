@@ -32,6 +32,7 @@ interface Availability {
     user_id: string;
     schedule: DayAvailability[];
     timezone: string;
+    is_accepting_bookings: boolean;
 }
 
 export default function BookingPage() {
@@ -222,6 +223,16 @@ export default function BookingPage() {
             </div>
         </div>
     );
+
+    if (!availability.is_accepting_bookings) return (
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+            <div className="text-center max-w-md p-6 bg-white rounded-lg shadow-sm border border-gray-100">
+                <h2 className="text-xl font-semibold text-gray-900 mb-2">Bookings Paused</h2>
+                <p className="text-gray-500">This user is not currently accepting new bookings. Please try again later.</p>
+            </div>
+        </div>
+    );
+
 
     return (
         <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
