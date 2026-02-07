@@ -160,30 +160,43 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AuthHandler) GoogleLogin(w http.ResponseWriter, r *http.Request) {
-	url := h.googleService.GetAuthURL()
+	// Extract token to use as state (to identify user in callback)
+	cookie, err := r.Cookie("access_token")
+	if err != nil || cookie.Value == "" {
+		respondError(w, errors.NewUnauthorizedError("must be logged in to sync calendar"), http.StatusUnauthorized)
+		return
+	}
+
+	// Validate token to ensure it's valid before using as state
+	_, err = h.jwtService.ValidateToken(cookie.Value)
+	if err != nil {
+		respondError(w, errors.NewUnauthorizedError("invalid token"), http.StatusUnauthorized)
+		return
+	}
+
+	url := h.googleService.GetAuthURL(cookie.Value) // Use JWT as state
 	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
 }
 
 func (h *AuthHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	code := r.URL.Query().Get("code")
+	state := r.URL.Query().Get("state") // This is our JWT
+
 	if code == "" {
 		respondError(w, errors.NewBadRequestError("code is required", nil), http.StatusBadRequest)
+		return
+	}
+
+	// Validate state (JWT) to get user ID
+	claims, err := h.jwtService.ValidateToken(state)
+	if err != nil {
+		respondError(w, errors.NewUnauthorizedError("invalid state token"), http.StatusUnauthorized)
 		return
 	}
 
 	token, err := h.googleService.ExchangeToken(r.Context(), code)
 	if err != nil {
 		respondError(w, errors.NewInternalError("failed to exchange token", err), http.StatusInternalServerError)
-		return
-	}
-
-	claims, ok := middleware.GetUserFromContext(r.Context())
-	if !ok {
-		// If unauthenticated, we can't link account.
-		// For "Sync Calendar", user MUST be logged in.
-		// If implementation supports "Login with Google", logic is different.
-		// Assuming "Sync" use case here as per requirement.
-		respondError(w, errors.NewUnauthorizedError("must be logged in to sync calendar"), http.StatusUnauthorized)
 		return
 	}
 
@@ -194,5 +207,6 @@ func (h *AuthHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Redirect back to settings or dashboard
+	// We use the CORS origin from config to ensure we redirect to frontend
 	http.Redirect(w, r, h.config.CORSOrigin+"/dashboard?google_linked=true", http.StatusTemporaryRedirect)
 }

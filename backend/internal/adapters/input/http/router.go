@@ -83,7 +83,7 @@ func (r *Router) Setup() http.Handler {
 	auth.HandleFunc("/login", r.authHandler.Login).Methods("POST")
 	auth.HandleFunc("/logout", r.authHandler.Logout).Methods("POST")
 	auth.HandleFunc("/google", r.authHandler.GoogleLogin).Methods("GET")
-	auth.Handle("/google/callback", r.authMiddleware.Authenticate(http.HandlerFunc(r.authHandler.GoogleCallback))).Methods("GET")
+	auth.HandleFunc("/google/callback", r.authHandler.GoogleCallback).Methods("GET")
 
 	// Protected routes - Auth
 	// We attach /me to the auth subrouter but wrap it with the auth middleware

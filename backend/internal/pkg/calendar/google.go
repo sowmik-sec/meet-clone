@@ -20,8 +20,14 @@ type Event struct {
 
 type Service interface {
 	CreateEvent(ctx context.Context, token *oauth2.Token, event Event) (string, error)
-	GetAuthURL() string
+	GetAuthURL(state string) string
 	ExchangeToken(ctx context.Context, code string) (*oauth2.Token, error)
+	GetBusyTimes(ctx context.Context, token *oauth2.Token, start, end time.Time) ([]TimePeriod, error)
+}
+
+type TimePeriod struct {
+	Start time.Time
+	End   time.Time
 }
 
 type googleService struct {
@@ -39,8 +45,8 @@ func NewGoogleService(clientID, clientSecret, redirectURL string) Service {
 	return &googleService{config: config}
 }
 
-func (s *googleService) GetAuthURL() string {
-	return s.config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
+func (s *googleService) GetAuthURL(state string) string {
+	return s.config.AuthCodeURL(state, oauth2.AccessTypeOffline)
 }
 
 func (s *googleService) ExchangeToken(ctx context.Context, code string) (*oauth2.Token, error) {
@@ -73,19 +79,44 @@ func (s *googleService) CreateEvent(ctx context.Context, token *oauth2.Token, ev
 		Attendees: attendees,
 		ConferenceData: &calendar.ConferenceData{
 			CreateRequest: &calendar.CreateConferenceRequest{
-				RequestId: "meet-clone-" + time.Now().String(), // Unique ID
-				// ConferenceSolutionKey: &calendar.ConferenceSolutionKey{Type: "hangoutsMeet"}, // Optional: Integrate Google Meet? No, we use our link.
+				RequestId: "meet-clone-" + time.Now().String(),
 			},
 		},
 	}
-
-	// We'll put our meeting link in the description or location
-	// For "hangoutsMeet" we need to be a real partner or something.
-	// Simplest: just add link to description/location.
 
 	createdEvent, err := srv.Events.Insert("primary", event).Context(ctx).Do()
 	if err != nil {
 		return "", err
 	}
 	return createdEvent.HtmlLink, nil
+}
+
+func (s *googleService) GetBusyTimes(ctx context.Context, token *oauth2.Token, start, end time.Time) ([]TimePeriod, error) {
+	client := s.config.Client(ctx, token)
+	srv, err := calendar.NewService(ctx, option.WithHTTPClient(client))
+	if err != nil {
+		return nil, err
+	}
+
+	freebusyReq := &calendar.FreeBusyRequest{
+		TimeMin: start.Format(time.RFC3339),
+		TimeMax: end.Format(time.RFC3339),
+		Items:   []*calendar.FreeBusyRequestItem{{Id: "primary"}},
+	}
+
+	fbResponse, err := srv.Freebusy.Query(freebusyReq).Do()
+	if err != nil {
+		return nil, err
+	}
+
+	var busyTimes []TimePeriod
+	if calendarBusy, ok := fbResponse.Calendars["primary"]; ok {
+		for _, busy := range calendarBusy.Busy {
+			start, _ := time.Parse(time.RFC3339, busy.Start)
+			end, _ := time.Parse(time.RFC3339, busy.End)
+			busyTimes = append(busyTimes, TimePeriod{Start: start, End: end})
+		}
+	}
+
+	return busyTimes, nil
 }

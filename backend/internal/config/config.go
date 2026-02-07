@@ -19,6 +19,9 @@ type Config struct {
 	CloudflareAPIToken  string
 	CloudflareAppID     string
 	CloudflareAppSecret string
+	GoogleClientID      string
+	GoogleClientSecret  string
+	GoogleRedirectURL   string
 }
 
 func Load() *Config {
@@ -43,6 +46,9 @@ func Load() *Config {
 		CloudflareAPIToken:  getEnv("CLOUDFLARE_API_TOKEN", ""),
 		CloudflareAppID:     getEnv("CLOUDFLARE_APP_ID", ""),
 		CloudflareAppSecret: getEnv("CLOUDFLARE_APP_SECRET", ""),
+		GoogleClientID:      getEnv("GOOGLE_CLIENT_ID", ""),
+		GoogleClientSecret:  getEnv("GOOGLE_CLIENT_SECRET", ""),
+		GoogleRedirectURL:   getEnv("GOOGLE_REDIRECT_URL", ""),
 	}
 }
 

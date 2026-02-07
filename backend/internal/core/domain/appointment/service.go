@@ -10,7 +10,9 @@ import (
 	"github.com/meet-clone/backend/internal/core/domain/eventtype"
 	"github.com/meet-clone/backend/internal/core/domain/room"
 	"github.com/meet-clone/backend/internal/core/domain/user"
+	"github.com/meet-clone/backend/internal/pkg/calendar"
 	"github.com/meet-clone/backend/internal/pkg/email"
+	"golang.org/x/oauth2"
 )
 
 // Request/Response structs
@@ -64,15 +66,17 @@ type service struct {
 	emailService  email.Service
 	eventTypeRepo eventtype.Repository
 	userRepo      user.Repository
+	calendar      calendar.Service
 }
 
-func NewService(repo Repository, roomService room.Service, emailService email.Service, eventTypeRepo eventtype.Repository, userRepo user.Repository) Service {
+func NewService(repo Repository, roomService room.Service, emailService email.Service, eventTypeRepo eventtype.Repository, userRepo user.Repository, calendar calendar.Service) Service {
 	return &service{
 		repo:          repo,
 		roomService:   roomService,
 		emailService:  emailService,
 		eventTypeRepo: eventTypeRepo,
 		userRepo:      userRepo,
+		calendar:      calendar,
 	}
 }
 
@@ -103,13 +107,8 @@ func (s *service) CreateAppointment(ctx context.Context, hostID string, req Crea
 		return nil, err
 	}
 
-	// Send Invitation Email if guest ID is provided (assuming guestId is email for now or we look it up)
-	// For MVP Phase 3, we assume guestID might be user ID. If we want to send email, we need email address.
-	// Since Appointment struct has GuestID, we'd need to fetch User to get email.
-	// For simplicity, let's assume we can notify "guest" if we find them.
-	// This requires User Service to lookup email. Avoiding circular dependency?
-	// AppointmentService depends on UserService? Or we passed email in request?
-	// Let's assume for now we don't send invitation on create until confirmed or we just skip if we can't find email.
+	// Try to sync with Google Calendar
+	s.syncToGoogleCalendar(ctx, appt)
 
 	return appt, nil
 }
@@ -202,6 +201,9 @@ func (s *service) ConfirmAppointment(ctx context.Context, id, hostID string) err
 	if err := s.repo.Update(ctx, appt); err != nil {
 		return err
 	}
+
+	// Sync with Google Calendar
+	s.syncToGoogleCalendar(ctx, appt)
 
 	// Send Confirmation Email
 	if strings.Contains(appt.GuestID, "@") {
@@ -334,8 +336,77 @@ func (s *service) CreatePublicBooking(ctx context.Context, hostID string, req Cr
 	return appt, nil
 }
 
+func (s *service) syncToGoogleCalendar(ctx context.Context, appt *Appointment) {
+	host, err := s.userRepo.FindByID(ctx, appt.HostID)
+	if err == nil && host != nil && host.GoogleAccessToken != "" {
+		token := &oauth2.Token{
+			AccessToken:  host.GoogleAccessToken,
+			RefreshToken: host.GoogleRefreshToken,
+			Expiry:       host.GoogleTokenExpiry,
+			TokenType:    "Bearer",
+		}
+
+		event := calendar.Event{
+			Summary:     appt.Title, // For public booking, Title is Guest Name
+			Description: appt.Description,
+			Start:       appt.StartTime,
+			End:         appt.EndTime,
+			Attendees:   []string{},
+		}
+
+		// If guest ID is email, add it
+		if strings.Contains(appt.GuestID, "@") {
+			event.Attendees = append(event.Attendees, appt.GuestID)
+		} else {
+			// Try to fetch guest user
+			guest, err := s.userRepo.FindByID(ctx, appt.GuestID)
+			if err == nil && guest != nil {
+				event.Attendees = append(event.Attendees, guest.Email)
+			}
+		}
+
+		_, err := s.calendar.CreateEvent(ctx, token, event)
+		if err != nil {
+			// logger.Error("Failed to create Google Calendar event: %v", err)
+		}
+	}
+}
+
 func (s *service) GetBookedSlots(ctx context.Context, userID string, date string) ([][]string, error) {
-	return s.repo.GetBookedSlots(ctx, userID, date)
+	// 1. Get internal booked slots
+	internalSlots, err := s.repo.GetBookedSlots(ctx, userID, date)
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. Get Google Calendar busy times
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err == nil && user != nil && user.GoogleAccessToken != "" {
+		// Use Google Calendar API
+		token := &oauth2.Token{
+			AccessToken:  user.GoogleAccessToken,
+			RefreshToken: user.GoogleRefreshToken,
+			Expiry:       user.GoogleTokenExpiry,
+			TokenType:    "Bearer",
+		}
+
+		startOfDay, _ := time.Parse("2006-01-02", date)
+		endOfDay := startOfDay.Add(24 * time.Hour)
+
+		busyTimes, err := s.calendar.GetBusyTimes(ctx, token, startOfDay, endOfDay)
+		if err == nil {
+			for _, busy := range busyTimes {
+				internalSlots = append(internalSlots, []string{
+					busy.Start.Format(time.RFC3339),
+					busy.End.Format(time.RFC3339),
+				})
+			}
+		} else {
+			// logger.Error("Failed to fetch Google Calendar busy times: %v", err)
+		}
+	}
+
+	return internalSlots, nil
 }
 
 func (s *service) GetAppointmentByRoomID(ctx context.Context, roomID string) (*Appointment, error) {

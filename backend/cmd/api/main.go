@@ -66,9 +66,9 @@ func main() {
 
 	// Initialize Google Calendar service
 	googleService := calendar.NewGoogleService(
-		os.Getenv("GOOGLE_CLIENT_ID"),
-		os.Getenv("GOOGLE_CLIENT_SECRET"),
-		os.Getenv("GOOGLE_REDIRECT_URL"), // e.g. http://localhost:8080/api/v1/auth/google/callback
+		cfg.GoogleClientID,
+		cfg.GoogleClientSecret,
+		cfg.GoogleRedirectURL,
 	)
 
 	// Initialize services
@@ -76,7 +76,7 @@ func main() {
 	roomService := room.NewService(roomRepo)
 	chatService := chat.NewService(chatRepo)
 	bandwidthService := bandwidth.NewService(bandwidthRepo)
-	appointmentService := appointment.NewService(appointmentRepo, roomService, emailService, eventTypeRepo, userRepo)
+	appointmentService := appointment.NewService(appointmentRepo, roomService, emailService, eventTypeRepo, userRepo, googleService)
 	availabilityService := availability.NewService(availabilityRepo)
 	eventTypeService := eventtype.NewService(eventTypeRepo)
 
