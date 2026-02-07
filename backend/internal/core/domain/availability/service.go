@@ -10,7 +10,7 @@ type Repository interface {
 }
 
 type Service interface {
-	SaveAvailability(ctx context.Context, userID string, schedule []DayAvailability, timezone string) (*Availability, error)
+	SaveAvailability(ctx context.Context, userID string, schedule []DayAvailability, timezone string, isAcceptingBookings bool) (*Availability, error)
 	GetAvailability(ctx context.Context, userID string) (*Availability, error)
 	// GetPublicAvailability(ctx context.Context, username string) (*Availability, error) // Will need user lookup by username
 }
@@ -23,11 +23,12 @@ func NewService(repo Repository) Service {
 	return &service{repo: repo}
 }
 
-func (s *service) SaveAvailability(ctx context.Context, userID string, schedule []DayAvailability, timezone string) (*Availability, error) {
+func (s *service) SaveAvailability(ctx context.Context, userID string, schedule []DayAvailability, timezone string, isAcceptingBookings bool) (*Availability, error) {
 	avail := &Availability{
-		UserID:   userID,
-		Schedule: schedule,
-		Timezone: timezone,
+		UserID:              userID,
+		Schedule:            schedule,
+		Timezone:            timezone,
+		IsAcceptingBookings: isAcceptingBookings,
 	}
 	// Validate schedule logic here (end > start, etc)
 	if err := s.repo.Save(ctx, avail); err != nil {

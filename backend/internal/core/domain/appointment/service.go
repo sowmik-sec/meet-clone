@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/meet-clone/backend/internal/core/domain/availability"
 	"github.com/meet-clone/backend/internal/core/domain/eventtype"
 	"github.com/meet-clone/backend/internal/core/domain/room"
 	"github.com/meet-clone/backend/internal/core/domain/user"
@@ -62,22 +63,24 @@ type Service interface {
 // Service Implementation
 
 type service struct {
-	repo          Repository
-	roomService   room.Service
-	emailService  email.Service
-	eventTypeRepo eventtype.Repository
-	userRepo      user.Repository
-	calendar      calendar.Service
+	repo             Repository
+	roomService      room.Service
+	emailService     email.Service
+	eventTypeRepo    eventtype.Repository
+	userRepo         user.Repository
+	availabilityRepo availability.Repository
+	calendar         calendar.Service
 }
 
-func NewService(repo Repository, roomService room.Service, emailService email.Service, eventTypeRepo eventtype.Repository, userRepo user.Repository, calendar calendar.Service) Service {
+func NewService(repo Repository, roomService room.Service, emailService email.Service, eventTypeRepo eventtype.Repository, userRepo user.Repository, availabilityRepo availability.Repository, calendar calendar.Service) Service {
 	return &service{
-		repo:          repo,
-		roomService:   roomService,
-		emailService:  emailService,
-		eventTypeRepo: eventTypeRepo,
-		userRepo:      userRepo,
-		calendar:      calendar,
+		repo:             repo,
+		roomService:      roomService,
+		emailService:     emailService,
+		eventTypeRepo:    eventTypeRepo,
+		userRepo:         userRepo,
+		availabilityRepo: availabilityRepo,
+		calendar:         calendar,
 	}
 }
 
@@ -267,6 +270,12 @@ func (s *service) StartAppointment(ctx context.Context, id, userID string) (stri
 }
 
 func (s *service) CreatePublicBooking(ctx context.Context, hostID string, req CreatePublicBookingRequest) (*Appointment, error) {
+	// Check if user is accepting bookings
+	availability, err := s.availabilityRepo.Get(ctx, hostID)
+	if err == nil && availability != nil && !availability.IsAcceptingBookings {
+		return nil, errors.New("this user is not currently accepting bookings")
+	}
+
 	if req.StartTime.Before(time.Now()) {
 		return nil, errors.New("start time must be in the future")
 	}

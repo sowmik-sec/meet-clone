@@ -50,7 +50,7 @@ func (h *AvailabilityHandler) SaveAvailability(w http.ResponseWriter, r *http.Re
 	}
 
 	// For now, accepting full struct, but usually DTO is better. validating schedule logic in service later if needed.
-	avail, err := h.service.SaveAvailability(r.Context(), claims.UserID, req.Schedule, req.Timezone)
+	avail, err := h.service.SaveAvailability(r.Context(), claims.UserID, req.Schedule, req.Timezone, req.IsAcceptingBookings)
 	if err != nil {
 		respondError(w, errors.NewInternalError("failed to save availability", err), http.StatusInternalServerError)
 		return

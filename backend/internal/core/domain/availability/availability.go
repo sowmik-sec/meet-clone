@@ -24,9 +24,10 @@ type DayAvailability struct {
 }
 
 type Availability struct {
-	UserID   string            `json:"user_id" bson:"user_id"`
-	Schedule []DayAvailability `json:"schedule" bson:"schedule"`
-	Timezone string            `json:"timezone" bson:"timezone"`
+	UserID              string            `json:"user_id" bson:"user_id"`
+	Schedule            []DayAvailability `json:"schedule" bson:"schedule"`
+	Timezone            string            `json:"timezone" bson:"timezone"`
+	IsAcceptingBookings bool              `json:"is_accepting_bookings" bson:"is_accepting_bookings"`
 }
 
 func DefaultAvailability(userID string) *Availability {
@@ -42,8 +43,9 @@ func DefaultAvailability(userID string) *Availability {
 		}
 	}
 	return &Availability{
-		UserID:   userID,
-		Schedule: schedule,
-		Timezone: "UTC",
+		UserID:              userID,
+		Schedule:            schedule,
+		Timezone:            "UTC",
+		IsAcceptingBookings: true,
 	}
 }

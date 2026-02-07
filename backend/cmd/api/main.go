@@ -76,7 +76,7 @@ func main() {
 	roomService := room.NewService(roomRepo)
 	chatService := chat.NewService(chatRepo)
 	bandwidthService := bandwidth.NewService(bandwidthRepo)
-	appointmentService := appointment.NewService(appointmentRepo, roomService, emailService, eventTypeRepo, userRepo, googleService)
+	appointmentService := appointment.NewService(appointmentRepo, roomService, emailService, eventTypeRepo, userRepo, availabilityRepo, googleService)
 	availabilityService := availability.NewService(availabilityRepo)
 	eventTypeService := eventtype.NewService(eventTypeRepo)
 
