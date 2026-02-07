@@ -12,6 +12,8 @@ export interface Appointment {
     meeting_type: 'meeting' | 'webinar';
     created_at: string;
     updated_at: string;
+    event_type_id?: string;
+    reschedule_token?: string;
 }
 
 export interface CreateAppointmentRequest {

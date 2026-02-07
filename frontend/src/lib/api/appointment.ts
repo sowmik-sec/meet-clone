@@ -38,4 +38,19 @@ export const appointmentApi = {
         const response = await api.get<string[][]>(`/users/${userId}/booked-slots?date=${date}`);
         return response.data;
     },
+
+    getAppointmentByRescheduleToken: async (token: string): Promise<Appointment> => {
+        const response = await api.get<Appointment>(`/appointments/reschedule/${token}`);
+        return response.data;
+    },
+
+    rescheduleAppointment: async (token: string, newStartTime: string): Promise<Appointment> => {
+        const response = await api.post<Appointment>(`/appointments/reschedule/${token}`, { new_start_time: newStartTime });
+        return response.data;
+    },
+
+    getAppointment: async (id: string): Promise<Appointment> => {
+        const response = await api.get<Appointment>(`/appointments/${id}`);
+        return response.data;
+    },
 };

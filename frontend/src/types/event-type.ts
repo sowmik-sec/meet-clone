@@ -11,6 +11,9 @@ export interface EventType {
     is_active: boolean;
     created_at: string;
     updated_at: string;
+    min_cancel_notice: number;
+    min_reschedule_notice: number;
+    allow_guest_cancel: boolean;
 }
 
 export interface CreateEventTypeRequest {
@@ -21,6 +24,9 @@ export interface CreateEventTypeRequest {
     buffer_before: number;
     buffer_after: number;
     color: string;
+    min_cancel_notice: number;
+    min_reschedule_notice: number;
+    allow_guest_cancel: boolean;
 }
 
 export interface UpdateEventTypeRequest {
@@ -32,4 +38,7 @@ export interface UpdateEventTypeRequest {
     buffer_after?: number;
     color?: string;
     is_active?: boolean;
+    min_cancel_notice?: number;
+    min_reschedule_notice?: number;
+    allow_guest_cancel?: boolean;
 }

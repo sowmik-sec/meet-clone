@@ -100,9 +100,12 @@ export default function EventTypesPage() {
                             <div className="mt-4 pt-4 border-t flex justify-between items-center text-sm">
                                 <span className="text-muted-foreground">/{et.slug}</span>
                                 <Button variant="outline" size="sm" onClick={() => {
-                                    navigator.clipboard.writeText(`${window.location.origin}/b/${user?.id}/${et.slug}`); // Need 'me' or user slug context
+                                    navigator.clipboard.writeText(`${window.location.origin}/b/${user?.id}/${et.slug}`);
                                     toast.success("Link copied");
                                 }}>Copy Link</Button>
+                                <Button variant="ghost" size="sm" onClick={() => {
+                                    window.open(`/b/${user?.id}/${et.slug}`, '_blank');
+                                }}>View</Button>
                             </div>
                         </div>
                     ))}

@@ -44,11 +44,17 @@ export function EventTypeForm({ open, onOpenChange, eventType, onSuccess }: Even
             buffer_before: eventType.buffer_before,
             buffer_after: eventType.buffer_after,
             color: eventType.color,
+            min_cancel_notice: eventType.min_cancel_notice,
+            min_reschedule_notice: eventType.min_reschedule_notice,
+            allow_guest_cancel: eventType.allow_guest_cancel,
         } : {
             duration: 30,
             buffer_before: 0,
             buffer_after: 0,
             color: "#000000",
+            min_cancel_notice: 0, // Default: anytime
+            min_reschedule_notice: 0, // Default: anytime
+            allow_guest_cancel: true, // Default: allowed
         }
     });
 
@@ -156,6 +162,65 @@ export function EventTypeForm({ open, onOpenChange, eventType, onSuccess }: Even
                     <div className="grid gap-2">
                         <Label htmlFor="description">Description</Label>
                         <Textarea id="description" {...register("description")} placeholder="Add details about this event type..." />
+                    </div>
+
+                    <div className="space-y-4 pt-4 border-t">
+                        <h3 className="text-sm font-medium text-muted-foreground">Cancellation Policy</h3>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="grid gap-2">
+                                <Label htmlFor="min_cancel_notice">Min Cancel Notice</Label>
+                                <Select
+                                    onValueChange={(val: string) => setValue("min_cancel_notice", parseInt(val))}
+                                    defaultValue={eventType?.min_cancel_notice?.toString() || "0"}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Anytime" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="0">Anytime</SelectItem>
+                                        <SelectItem value="1">1 hour</SelectItem>
+                                        <SelectItem value="2">2 hours</SelectItem>
+                                        <SelectItem value="4">4 hours</SelectItem>
+                                        <SelectItem value="12">12 hours</SelectItem>
+                                        <SelectItem value="24">24 hours</SelectItem>
+                                        <SelectItem value="48">48 hours</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="grid gap-2">
+                                <Label htmlFor="min_reschedule_notice">Min Reschedule Notice</Label>
+                                <Select
+                                    onValueChange={(val: string) => setValue("min_reschedule_notice", parseInt(val))}
+                                    defaultValue={eventType?.min_reschedule_notice?.toString() || "0"}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Anytime" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="0">Anytime</SelectItem>
+                                        <SelectItem value="1">1 hour</SelectItem>
+                                        <SelectItem value="2">2 hours</SelectItem>
+                                        <SelectItem value="4">4 hours</SelectItem>
+                                        <SelectItem value="12">12 hours</SelectItem>
+                                        <SelectItem value="24">24 hours</SelectItem>
+                                        <SelectItem value="48">48 hours</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center space-x-2">
+                            <input
+                                type="checkbox"
+                                id="allow_guest_cancel"
+                                className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                                {...register("allow_guest_cancel")}
+                            />
+                            <Label htmlFor="allow_guest_cancel" className="font-normal cursor-pointer">
+                                Allow guests to cancel their booking
+                            </Label>
+                        </div>
                     </div>
 
                     <DialogFooter>
