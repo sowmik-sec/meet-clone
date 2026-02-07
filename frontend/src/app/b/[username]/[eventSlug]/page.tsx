@@ -152,7 +152,7 @@ export default function BookingPage() {
         const slotStart = new Date(`${dateStr}T${timeStr}:00`);
         const slotEnd = new Date(slotStart.getTime() + eventType.duration * 60 * 1000);
 
-        return !bookedSlots.some(([start, end]) => {
+        return !bookedSlots?.some(([start, end]) => {
             const bookedStart = new Date(start);
             const bookedEnd = new Date(end);
             return (slotStart < bookedEnd && slotEnd > bookedStart);
