@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/meet-clone/backend/internal/adapters/input/http/middleware"
@@ -40,6 +41,23 @@ func (h *AppointmentHandler) CreateAppointment(w http.ResponseWriter, r *http.Re
 	}
 
 	respondJSON(w, appt, http.StatusCreated)
+}
+
+func (h *AppointmentHandler) GetAppointment(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	appt, err := h.service.GetAppointment(r.Context(), id)
+	if err != nil {
+		respondError(w, errors.NewInternalError("failed to get appointment", err), http.StatusInternalServerError)
+		return
+	}
+	if appt == nil {
+		respondError(w, errors.NewNotFoundError("appointment not found"), http.StatusNotFound)
+		return
+	}
+
+	respondJSON(w, appt, http.StatusOK)
 }
 
 func (h *AppointmentHandler) GetUserAppointments(w http.ResponseWriter, r *http.Request) {
@@ -171,4 +189,42 @@ func (h *AppointmentHandler) GetBookedSlots(w http.ResponseWriter, r *http.Reque
 	}
 
 	respondJSON(w, slots, http.StatusOK)
+}
+
+func (h *AppointmentHandler) RescheduleAppointment(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	token := vars["token"]
+
+	var req struct {
+		NewStartTime time.Time `json:"new_start_time"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, errors.NewBadRequestError("invalid request body", err), http.StatusBadRequest)
+		return
+	}
+
+	appt, err := h.service.RescheduleAppointment(r.Context(), token, req.NewStartTime)
+	if err != nil {
+		respondError(w, errors.NewInternalError("failed to reschedule appointment", err), http.StatusInternalServerError)
+		return
+	}
+
+	respondJSON(w, appt, http.StatusOK)
+}
+
+func (h *AppointmentHandler) GetAppointmentByRescheduleToken(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	token := vars["token"]
+
+	appt, err := h.service.GetAppointmentByRescheduleToken(r.Context(), token)
+	if err != nil {
+		respondError(w, errors.NewInternalError("failed to get appointment", err), http.StatusInternalServerError)
+		return
+	}
+	if appt == nil {
+		respondError(w, errors.NewNotFoundError("appointment not found"), http.StatusNotFound)
+		return
+	}
+
+	respondJSON(w, appt, http.StatusOK)
 }

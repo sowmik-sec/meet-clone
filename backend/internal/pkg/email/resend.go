@@ -7,10 +7,11 @@ import (
 )
 
 type Service interface {
-	SendAppointmentConfirmation(to string, userName string, title string, time string, link string) error
+	SendAppointmentConfirmation(to string, userName string, title string, time string, link string, rescheduleLink string) error
 	SendAppointmentInvitation(to string, inviterName string, title string, time string, link string) error
 	SendAppointmentCancellation(to string, title string, time string) error
 	SendAppointmentPending(to string, userName string, title string, time string) error
+	SendAppointmentReminder(to string, userName string, title string, time string, link string, rescheduleLink string) error
 }
 
 type resendService struct {
@@ -29,7 +30,7 @@ func NewResendService(apiKey string, fromEmail string) Service {
 	}
 }
 
-func (s *resendService) SendAppointmentConfirmation(to string, userName string, title string, time string, link string) error {
+func (s *resendService) SendAppointmentConfirmation(to string, userName string, title string, time string, link string, rescheduleLink string) error {
 	params := &resend.SendEmailRequest{
 		From:    s.from,
 		To:      []string{to},
@@ -39,12 +40,18 @@ func (s *resendService) SendAppointmentConfirmation(to string, userName string, 
 			<p>Hi %s,</p>
 			<p>Your appointment <strong>%s</strong> is confirmed for <strong>%s</strong>.</p>
 			<p><a href="%s">Join Meeting</a></p>
-		`, userName, title, time, link),
+			<hr/>
+			<p>Need to reschedule? <a href="%s">Click here</a></p>
+		`, userName, title, time, link, rescheduleLink),
 	}
 
 	_, err := s.client.Emails.Send(params)
 	return err
 }
+
+// Wait, I can't just change the signature and implementation in one go without breaking callers.
+// I will stick to adding the new method `SendAppointmentReminder` first, and then I will do a separate edit to update `SendAppointmentConfirmation` signature and its callers.
+// Let's just add `SendAppointmentReminder` for now to be safe and atomic.
 
 func (s *resendService) SendAppointmentInvitation(to string, inviterName string, title string, time string, link string) error {
 	params := &resend.SendEmailRequest{
@@ -95,11 +102,30 @@ func (s *resendService) SendAppointmentPending(to string, userName string, title
 	return err
 }
 
+func (s *resendService) SendAppointmentReminder(to, userName, title, time, link, rescheduleLink string) error {
+	params := &resend.SendEmailRequest{
+		From:    s.from,
+		To:      []string{to},
+		Subject: fmt.Sprintf("Reminder: %s", title),
+		Html: fmt.Sprintf(`
+			<h1>Appointment Reminder</h1>
+			<p>Hi %s,</p>
+			<p>This is a reminder that you have an appointment <strong>%s</strong> starting in 30 minutes at <strong>%s</strong>.</p>
+			<p><a href="%s">Join Meeting</a></p>
+			<hr/>
+			<p>Need to reschedule? <a href="%s">Click here</a></p>
+		`, userName, title, time, link, rescheduleLink),
+	}
+
+	_, err := s.client.Emails.Send(params)
+	return err
+}
+
 // Noop service for local dev without keys
 type noopService struct{}
 
-func (s *noopService) SendAppointmentConfirmation(to, name, title, time, link string) error {
-	fmt.Printf("[Email Mock] Confirmation sent to %s for %s\n", to, title)
+func (s *noopService) SendAppointmentConfirmation(to, name, title, time, link, rescheduleLink string) error {
+	fmt.Printf("[Email Mock] Confirmation sent to %s for %s. Reschedule: %s\n", to, title, rescheduleLink)
 	return nil
 }
 func (s *noopService) SendAppointmentInvitation(to, name, title, time, link string) error {
@@ -112,5 +138,9 @@ func (s *noopService) SendAppointmentCancellation(to, title, time string) error 
 }
 func (s *noopService) SendAppointmentPending(to, name, title, time string) error {
 	fmt.Printf("[Email Mock] Pending request sent to %s for %s\n", to, title)
+	return nil
+}
+func (s *noopService) SendAppointmentReminder(to, name, title, time, link, rescheduleLink string) error {
+	fmt.Printf("[Email Mock] Reminder sent to %s for %s. Reschedule: %s\n", to, title, rescheduleLink)
 	return nil
 }

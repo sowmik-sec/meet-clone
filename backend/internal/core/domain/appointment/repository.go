@@ -2,6 +2,7 @@ package appointment
 
 import (
 	"context"
+	"time"
 )
 
 type AppointmentFilter struct {
@@ -18,5 +19,7 @@ type Repository interface {
 	Delete(ctx context.Context, id string) error
 	HasConflict(ctx context.Context, userID string, startTime, endTime string) (bool, error)
 	GetBookedSlots(ctx context.Context, userID string, date string) ([][]string, error)
+	FindUpcoming(ctx context.Context, start, end time.Time) ([]Appointment, error)
 	FindByRoomID(ctx context.Context, roomID string) (*Appointment, error)
+	FindByRescheduleToken(ctx context.Context, token string) (*Appointment, error)
 }

@@ -26,6 +26,7 @@ import (
 	"github.com/meet-clone/backend/internal/pkg/email"
 	"github.com/meet-clone/backend/internal/pkg/jwt"
 	"github.com/meet-clone/backend/internal/pkg/logger"
+	"github.com/meet-clone/backend/internal/pkg/scheduler"
 )
 
 func main() {
@@ -90,6 +91,23 @@ func main() {
 	wsHub := websocket.NewHub(chatService)
 	go wsHub.Run()
 	logger.Info.Println("WebSocket hub started")
+
+	// Initialize and start Reminder Scheduler
+	// Frontend URL for links (should be in config, but using hardcoded or cfg if available)
+	// Assuming cfg.FrontendURL exists or we construct it.
+	// The config loaded in line 38 likely has it or we can default to localhost:3000
+	// Checking main.go imports... `config` package is used.
+	// Let's assume cfg.FrontendURL or use a default if not present.
+	// Actually, I don't see FrontendURL in the config usage here.
+	// I'll check config.go if I need to, but for now I'll use a safe default or string.
+	frontendURL := os.Getenv("FRONTEND_URL")
+	if frontendURL == "" {
+		frontendURL = "http://localhost:3000"
+	}
+
+	reminderService := scheduler.NewReminderService(appointmentRepo, userRepo, emailService, 5*time.Minute, frontendURL)
+	go reminderService.Start(context.Background())
+	logger.Info.Println("Reminder scheduler started")
 
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(userService, jwtService, cfg, googleService)

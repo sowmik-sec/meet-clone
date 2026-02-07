@@ -30,6 +30,10 @@ type Appointment struct {
 	Timezone          string            `json:"timezone" bson:"timezone"`
 	Status            AppointmentStatus `json:"status" bson:"status"`
 	MeetingType       string            `json:"meeting_type" bson:"meeting_type"` // "meeting" or "webinar"
+	RescheduleToken   string            `json:"-" bson:"reschedule_token"`
+	RescheduleCount   int               `json:"reschedule_count" bson:"reschedule_count"`
+	ReminderSent      bool              `json:"reminder_sent" bson:"reminder_sent"`
+	GoogleEventID     string            `json:"google_event_id,omitempty" bson:"google_event_id,omitempty"`
 	CreatedAt         time.Time         `json:"created_at" bson:"created_at"`
 	UpdatedAt         time.Time         `json:"updated_at" bson:"updated_at"`
 }

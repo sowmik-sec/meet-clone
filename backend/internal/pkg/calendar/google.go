@@ -19,7 +19,9 @@ type Event struct {
 }
 
 type Service interface {
-	CreateEvent(ctx context.Context, token *oauth2.Token, event Event) (string, error)
+	CreateEvent(ctx context.Context, token *oauth2.Token, event Event) (string, string, error) // Returns ID, Link, Error
+	UpdateEvent(ctx context.Context, token *oauth2.Token, eventID string, event Event) error
+	DeleteEvent(ctx context.Context, token *oauth2.Token, eventID string) error
 	GetAuthURL(state string) string
 	ExchangeToken(ctx context.Context, code string) (*oauth2.Token, error)
 	GetBusyTimes(ctx context.Context, token *oauth2.Token, start, end time.Time) ([]TimePeriod, error)
@@ -53,11 +55,11 @@ func (s *googleService) ExchangeToken(ctx context.Context, code string) (*oauth2
 	return s.config.Exchange(ctx, code)
 }
 
-func (s *googleService) CreateEvent(ctx context.Context, token *oauth2.Token, evt Event) (string, error) {
+func (s *googleService) CreateEvent(ctx context.Context, token *oauth2.Token, evt Event) (string, string, error) {
 	client := s.config.Client(ctx, token)
 	srv, err := calendar.NewService(ctx, option.WithHTTPClient(client))
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	attendees := make([]*calendar.EventAttendee, len(evt.Attendees))
@@ -86,9 +88,49 @@ func (s *googleService) CreateEvent(ctx context.Context, token *oauth2.Token, ev
 
 	createdEvent, err := srv.Events.Insert("primary", event).Context(ctx).Do()
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
-	return createdEvent.HtmlLink, nil
+	return createdEvent.Id, createdEvent.HtmlLink, nil
+}
+
+func (s *googleService) UpdateEvent(ctx context.Context, token *oauth2.Token, eventID string, evt Event) error {
+	client := s.config.Client(ctx, token)
+	srv, err := calendar.NewService(ctx, option.WithHTTPClient(client))
+	if err != nil {
+		return err
+	}
+
+	attendees := make([]*calendar.EventAttendee, len(evt.Attendees))
+	for i, email := range evt.Attendees {
+		attendees[i] = &calendar.EventAttendee{Email: email}
+	}
+
+	event := &calendar.Event{
+		Summary:     evt.Summary,
+		Description: evt.Description,
+		Start: &calendar.EventDateTime{
+			DateTime: evt.Start.Format(time.RFC3339),
+			TimeZone: "UTC",
+		},
+		End: &calendar.EventDateTime{
+			DateTime: evt.End.Format(time.RFC3339),
+			TimeZone: "UTC",
+		},
+		Attendees: attendees,
+	}
+
+	_, err = srv.Events.Update("primary", eventID, event).Context(ctx).Do()
+	return err
+}
+
+func (s *googleService) DeleteEvent(ctx context.Context, token *oauth2.Token, eventID string) error {
+	client := s.config.Client(ctx, token)
+	srv, err := calendar.NewService(ctx, option.WithHTTPClient(client))
+	if err != nil {
+		return err
+	}
+
+	return srv.Events.Delete("primary", eventID).Context(ctx).Do()
 }
 
 func (s *googleService) GetBusyTimes(ctx context.Context, token *oauth2.Token, start, end time.Time) ([]TimePeriod, error) {

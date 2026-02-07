@@ -167,9 +167,50 @@ func (r *appointmentRepository) GetBookedSlots(ctx context.Context, userID strin
 	return slots, nil
 }
 
+func (r *appointmentRepository) FindUpcoming(ctx context.Context, start, end time.Time) ([]appointment.Appointment, error) {
+	filter := bson.M{
+		"status": appointment.StatusConfirmed,
+		"start_time": bson.M{
+			"$gte": start,
+			"$lte": end,
+		},
+		"reminder_sent": bson.M{
+			"$ne": true,
+		},
+	}
+
+	cursor, err := r.collection.Find(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var appointments []appointment.Appointment
+	if err = cursor.All(ctx, &appointments); err != nil {
+		return nil, err
+	}
+	// Return empty slice instead of nil if no docs
+	if appointments == nil {
+		appointments = []appointment.Appointment{}
+	}
+	return appointments, nil
+}
+
 func (r *appointmentRepository) FindByRoomID(ctx context.Context, roomID string) (*appointment.Appointment, error) {
 	var appt appointment.Appointment
 	err := r.collection.FindOne(ctx, bson.M{"room_id": roomID}).Decode(&appt)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &appt, nil
+}
+
+func (r *appointmentRepository) FindByRescheduleToken(ctx context.Context, token string) (*appointment.Appointment, error) {
+	var appt appointment.Appointment
+	err := r.collection.FindOne(ctx, bson.M{"reschedule_token": token}).Decode(&appt)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, nil
