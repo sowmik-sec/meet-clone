@@ -39,18 +39,21 @@ func (s *service) CreateEventType(ctx context.Context, userID string, req Create
 	}
 
 	et := &EventType{
-		ID:           uuid.New().String(),
-		UserID:       userID,
-		Title:        req.Title,
-		Slug:         req.Slug,
-		Description:  req.Description,
-		Duration:     req.Duration,
-		BufferBefore: req.BufferBefore,
-		BufferAfter:  req.BufferAfter,
-		Color:        req.Color,
-		IsActive:     true,
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
+		ID:                  uuid.New().String(),
+		UserID:              userID,
+		Title:               req.Title,
+		Slug:                req.Slug,
+		Description:         req.Description,
+		Duration:            req.Duration,
+		BufferBefore:        req.BufferBefore,
+		BufferAfter:         req.BufferAfter,
+		Color:               req.Color,
+		IsActive:            true,
+		MinCancelNotice:     req.MinCancelNotice,
+		MinRescheduleNotice: req.MinRescheduleNotice,
+		AllowGuestCancel:    req.AllowGuestCancel,
+		CreatedAt:           time.Now(),
+		UpdatedAt:           time.Now(),
 	}
 
 	if err := s.repo.Create(ctx, et); err != nil {
@@ -120,6 +123,15 @@ func (s *service) UpdateEventType(ctx context.Context, id, userID string, req Up
 	}
 	if req.IsActive != nil {
 		et.IsActive = *req.IsActive
+	}
+	if req.MinCancelNotice != nil {
+		et.MinCancelNotice = *req.MinCancelNotice
+	}
+	if req.MinRescheduleNotice != nil {
+		et.MinRescheduleNotice = *req.MinRescheduleNotice
+	}
+	if req.AllowGuestCancel != nil {
+		et.AllowGuestCancel = *req.AllowGuestCancel
 	}
 	et.UpdatedAt = time.Now()
 
