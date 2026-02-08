@@ -15,6 +15,7 @@ type User struct {
 	Password           string    `json:"-" bson:"password"`
 	Name               string    `json:"name" bson:"name"`
 	Avatar             string    `json:"avatar" bson:"avatar"`
+	Bio                string    `json:"bio,omitempty" bson:"bio,omitempty"` // Short bio/description
 	GoogleAccessToken  string    `json:"-" bson:"google_access_token,omitempty"`
 	GoogleRefreshToken string    `json:"-" bson:"google_refresh_token,omitempty"`
 	GoogleTokenExpiry  time.Time `json:"-" bson:"google_token_expiry,omitempty"`

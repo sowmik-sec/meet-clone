@@ -11,7 +11,9 @@ type Service interface {
 	Register(ctx context.Context, email, password, name string) (*User, error)
 	Login(ctx context.Context, email, password string) (*User, error)
 	GetByID(ctx context.Context, id string) (*User, error)
+	GetPublicProfile(ctx context.Context, id string) (*User, error)
 	UpdateGoogleToken(ctx context.Context, userID, accessToken, refreshToken string, expiry time.Time) error
+	UpdateProfile(ctx context.Context, userID, name, bio string) (*User, error)
 }
 
 type service struct {
@@ -67,6 +69,17 @@ func (s *service) GetByID(ctx context.Context, id string) (*User, error) {
 	return user, nil
 }
 
+func (s *service) GetPublicProfile(ctx context.Context, id string) (*User, error) {
+	// For now, same as GetByID but the handler will filter fields
+	// In future, might have privacy logic here
+	user, err := s.repo.FindByID(ctx, id)
+	if err != nil {
+		return nil, errors.NewNotFoundError("user not found")
+	}
+
+	return user, nil
+}
+
 func (s *service) UpdateGoogleToken(ctx context.Context, userID, accessToken, refreshToken string, expiry time.Time) error {
 	user, err := s.repo.FindByID(ctx, userID)
 	if err != nil {
@@ -87,4 +100,31 @@ func (s *service) UpdateGoogleToken(ctx context.Context, userID, accessToken, re
 		return errors.NewInternalError("failed to update user token", err)
 	}
 	return nil
+}
+
+func (s *service) UpdateProfile(ctx context.Context, userID, name, bio string) (*User, error) {
+	user, err := s.repo.FindByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return nil, errors.NewNotFoundError("user not found")
+	}
+
+	if name != "" {
+		if len(name) < 2 {
+			return nil, ErrInvalidName
+		}
+		user.Name = name
+	}
+
+	// Bio can be empty or updated
+	user.Bio = bio
+	user.UpdatedAt = time.Now()
+
+	if err := s.repo.Update(ctx, user); err != nil {
+		return nil, errors.NewInternalError("failed to update profile", err)
+	}
+
+	return user, nil
 }
