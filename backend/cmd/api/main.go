@@ -111,6 +111,7 @@ func main() {
 
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(userService, jwtService, cfg, googleService)
+	userHandler := handlers.NewUserHandler(userService)
 	roomHandler := handlers.NewRoomHandler(roomService, appointmentService)
 	chatHandler := handlers.NewChatHandler(chatService)
 	callsHandler := handlers.NewCallsHandler(callsService, roomService)
@@ -126,6 +127,7 @@ func main() {
 	// Setup router
 	router := httpRouter.NewRouter(
 		authHandler,
+		userHandler,
 		roomHandler,
 		chatHandler,
 		callsHandler,

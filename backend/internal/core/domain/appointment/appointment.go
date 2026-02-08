@@ -29,7 +29,8 @@ type Appointment struct {
 	BufferAfter       int               `json:"buffer_after,omitempty" bson:"buffer_after,omitempty"`   // minutes
 	Timezone          string            `json:"timezone" bson:"timezone"`
 	Status            AppointmentStatus `json:"status" bson:"status"`
-	MeetingType       string            `json:"meeting_type" bson:"meeting_type"` // "meeting" or "webinar"
+	MeetingType       string            `json:"meeting_type" bson:"meeting_type"`           // "meeting" or "webinar"
+	Answers           map[string]string `json:"answers,omitempty" bson:"answers,omitempty"` // question_id -> answer
 	RescheduleToken   string            `json:"reschedule_token" bson:"reschedule_token"`
 	RescheduleCount   int               `json:"reschedule_count" bson:"reschedule_count"`
 	ReminderSent      bool              `json:"reminder_sent" bson:"reminder_sent"`

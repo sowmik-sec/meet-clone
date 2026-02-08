@@ -113,3 +113,31 @@ func (h *EventTypeHandler) GetPublicEventTypes(w http.ResponseWriter, r *http.Re
 
 	respondJSON(w, list, http.StatusOK)
 }
+
+func (h *EventTypeHandler) GetEventType(w http.ResponseWriter, r *http.Request) {
+	claims, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		respondError(w, errors.NewUnauthorizedError("unauthorized"), http.StatusUnauthorized)
+		return
+	}
+
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	et, err := h.service.GetEventType(r.Context(), id)
+	if err != nil {
+		respondError(w, errors.NewInternalError("failed to get event type", err), http.StatusInternalServerError)
+		return
+	}
+	if et == nil {
+		respondError(w, errors.NewNotFoundError("event type not found"), http.StatusNotFound)
+		return
+	}
+
+	if et.UserID != claims.UserID {
+		respondError(w, errors.NewUnauthorizedError("unauthorized"), http.StatusUnauthorized)
+		return
+	}
+
+	respondJSON(w, et, http.StatusOK)
+}

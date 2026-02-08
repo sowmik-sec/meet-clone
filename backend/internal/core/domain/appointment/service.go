@@ -30,11 +30,12 @@ type CreateAppointmentRequest struct {
 }
 
 type CreatePublicBookingRequest struct {
-	GuestName   string    `json:"guest_name"`
-	GuestEmail  string    `json:"guest_email"`
-	StartTime   time.Time `json:"start_time"`
-	Timezone    string    `json:"timezone"`
-	EventTypeID string    `json:"event_type_id"`
+	GuestName   string            `json:"guest_name"`
+	GuestEmail  string            `json:"guest_email"`
+	StartTime   time.Time         `json:"start_time"`
+	Timezone    string            `json:"timezone"`
+	EventTypeID string            `json:"event_type_id"`
+	Answers     map[string]string `json:"answers,omitempty"`
 }
 
 type UpdateAppointmentRequest struct {
@@ -359,6 +360,16 @@ func (s *service) CreatePublicBooking(ctx context.Context, hostID string, req Cr
 			if hasBooking {
 				return nil, errors.New("you have already booked this time slot")
 			}
+
+			// Validate Answers
+			for _, q := range et.Questions {
+				if q.Required {
+					val, ok := req.Answers[q.ID]
+					if !ok || val == "" {
+						return nil, fmt.Errorf("question '%s' is required", q.Label)
+					}
+				}
+			}
 		}
 	}
 
@@ -405,10 +416,7 @@ func (s *service) CreatePublicBooking(ctx context.Context, hostID string, req Cr
 	appt.BufferAfter = bufferAfter
 	appt.BufferedStartTime = appt.StartTime.Add(-time.Duration(bufferBefore) * time.Minute)
 	appt.BufferedEndTime = appt.EndTime.Add(time.Duration(bufferAfter) * time.Minute)
-	appt.BufferBefore = bufferBefore
-	appt.BufferAfter = bufferAfter
-	appt.BufferedStartTime = appt.StartTime.Add(-time.Duration(bufferBefore) * time.Minute)
-	appt.BufferedEndTime = appt.EndTime.Add(time.Duration(bufferAfter) * time.Minute)
+	appt.Answers = req.Answers
 	appt.Status = StatusPending // Require host approval
 	appt.RescheduleToken = uuid.New().String()
 	appt.RescheduleCount = 0

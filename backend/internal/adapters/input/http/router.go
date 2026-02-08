@@ -15,6 +15,7 @@ import (
 type Router struct {
 	router              *mux.Router
 	authHandler         *httpHandlers.AuthHandler
+	userHandler         *httpHandlers.UserHandler
 	roomHandler         *httpHandlers.RoomHandler
 	chatHandler         *httpHandlers.ChatHandler
 	callsHandler        *httpHandlers.CallsHandler
@@ -29,6 +30,7 @@ type Router struct {
 
 func NewRouter(
 	authHandler *httpHandlers.AuthHandler,
+	userHandler *httpHandlers.UserHandler,
 	roomHandler *httpHandlers.RoomHandler,
 	chatHandler *httpHandlers.ChatHandler,
 	callsHandler *httpHandlers.CallsHandler,
@@ -43,6 +45,7 @@ func NewRouter(
 	return &Router{
 		router:              mux.NewRouter(),
 		authHandler:         authHandler,
+		userHandler:         userHandler,
 		roomHandler:         roomHandler,
 		chatHandler:         chatHandler,
 		callsHandler:        callsHandler,
@@ -88,6 +91,7 @@ func (r *Router) Setup() http.Handler {
 	// Protected routes - Auth
 	// We attach /me to the auth subrouter but wrap it with the auth middleware
 	auth.Handle("/me", r.authMiddleware.Authenticate(http.HandlerFunc(r.authHandler.Me))).Methods("GET")
+	auth.Handle("/me", r.authMiddleware.Authenticate(http.HandlerFunc(r.userHandler.UpdateProfile))).Methods("PUT")
 
 	// Protected routes - Rooms
 	rooms := api.PathPrefix("/rooms").Subrouter()
@@ -145,6 +149,7 @@ func (r *Router) Setup() http.Handler {
 	api.HandleFunc("/users/{userId}/booked-slots", r.appointmentHandler.GetBookedSlots).Methods("GET")
 	api.HandleFunc("/users/{userId}/booked-slots", r.appointmentHandler.GetBookedSlots).Methods("GET")
 	api.HandleFunc("/users/{userId}/event-types", r.eventTypeHandler.GetPublicEventTypes).Methods("GET")
+	api.HandleFunc("/users/{userId}/profile", r.userHandler.GetPublicProfile).Methods("GET")
 	api.HandleFunc("/appointments/reschedule/{token}", r.appointmentHandler.GetAppointmentByRescheduleToken).Methods("GET")
 	api.HandleFunc("/appointments/reschedule/{token}", r.appointmentHandler.RescheduleAppointment).Methods("POST")
 	api.HandleFunc("/appointments/reschedule/{token}", r.appointmentHandler.CancelAppointmentByToken).Methods("DELETE")
@@ -155,6 +160,7 @@ func (r *Router) Setup() http.Handler {
 	eventTypes.Use(r.authMiddleware.Authenticate)
 	eventTypes.HandleFunc("", r.eventTypeHandler.ListEventTypes).Methods("GET")
 	eventTypes.HandleFunc("", r.eventTypeHandler.CreateEventType).Methods("POST")
+	eventTypes.HandleFunc("/{id}", r.eventTypeHandler.GetEventType).Methods("GET")
 	eventTypes.HandleFunc("/{id}", r.eventTypeHandler.UpdateEventType).Methods("PUT")
 	eventTypes.HandleFunc("/{id}", r.eventTypeHandler.DeleteEventType).Methods("DELETE")
 
