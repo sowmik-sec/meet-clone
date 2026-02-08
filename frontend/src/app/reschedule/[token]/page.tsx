@@ -15,6 +15,14 @@ import { ArrowLeft, Calendar as CalendarIcon, Clock, AlertTriangle } from 'lucid
 import { format } from 'date-fns';
 import { EventType } from '@/types/event-type';
 import { Appointment } from '@/types/appointment';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
 
 interface TimeSlot {
     start: string;
@@ -48,6 +56,8 @@ export default function ReschedulePage() {
     const [loading, setLoading] = useState(true);
     const [bookedSlots, setBookedSlots] = useState<string[][]>([]);
     const [error, setError] = useState<string | null>(null);
+    const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+    const [isCancelling, setIsCancelling] = useState(false);
 
     // View state: 'calendar' or 'confirm'
     const [view, setView] = useState<'calendar' | 'confirm'>('calendar');
@@ -137,7 +147,7 @@ export default function ReschedulePage() {
                 const nextSlot = new Date(current.getTime() + durationMin * 60 * 1000);
 
                 if (isToday && current <= now) {
-                    const step = durationMin <= 15 ? 15 : 30;
+                    const step = durationMin;
                     current = new Date(current.getTime() + step * 60 * 1000);
                     continue;
                 }
@@ -148,7 +158,9 @@ export default function ReschedulePage() {
                         slots.push(timeString);
                     }
                 }
-                const step = durationMin <= 15 ? 15 : 30;
+                // Use duration + buffers as step
+                const totalBuffer = (eventType.buffer_before || 0) + (eventType.buffer_after || 0);
+                const step = durationMin + totalBuffer;
                 current = new Date(current.getTime() + step * 60 * 1000);
             }
         });
@@ -162,10 +174,17 @@ export default function ReschedulePage() {
         const slotStart = new Date(`${dateStr}T${timeStr}:00`);
         const slotEnd = new Date(slotStart.getTime() + eventType.duration * 60 * 1000);
 
+        // Include buffer before and after for the new slot
+        const bufferBefore = (eventType.buffer_before || 0) * 60 * 1000;
+        const bufferAfter = (eventType.buffer_after || 0) * 60 * 1000;
+        const bufferedStart = new Date(slotStart.getTime() - bufferBefore);
+        const bufferedEnd = new Date(slotEnd.getTime() + bufferAfter);
+
         return !bookedSlots?.some(([start, end]) => {
             const bookedStart = new Date(start);
             const bookedEnd = new Date(end);
-            return (slotStart < bookedEnd && slotEnd > bookedStart);
+            // Check if the buffered slot overlaps with any booked slot
+            return (bufferedStart < bookedEnd && bufferedEnd > bookedStart);
         });
     };
 
@@ -177,6 +196,27 @@ export default function ReschedulePage() {
     const handleBackToCalendar = () => {
         setView('calendar');
         setSelectedSlot(null);
+    };
+
+    const handleCancelAppointment = async () => {
+        setIsCancelling(true);
+        try {
+            await appointmentApi.cancelAppointmentByToken(token);
+            toast({
+                title: "Appointment Cancelled",
+                description: "This appointment has been successfully cancelled.",
+            });
+            setError("cancelled"); // Show cancelled state
+            setCancelDialogOpen(false);
+        } catch (error: any) {
+            console.error(error);
+            toast({
+                title: "Cancellation Failed",
+                description: error.response?.data?.error || "Could not cancel appointment.",
+                variant: "destructive"
+            });
+            setIsCancelling(false);
+        }
     };
 
     const handleReschedule = async () => {
@@ -245,6 +285,27 @@ export default function ReschedulePage() {
         )
     }
 
+    if (error === "cancelled") {
+        return (
+            <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+                <Card className="max-w-md w-full text-center p-8 bg-red-50 border-red-100">
+                    <div className="flex justify-center mb-4">
+                        <div className="h-12 w-12 bg-red-100 rounded-full flex items-center justify-center">
+                            <AlertTriangle className="w-6 h-6 text-red-600" />
+                        </div>
+                    </div>
+                    <h2 className="text-xl font-bold text-red-900 mb-2">Appointment Cancelled</h2>
+                    <p className="text-red-700 mb-6">
+                        This appointment has been cancelled as requested.
+                    </p>
+                    <Button onClick={() => router.push('/')} variant="outline" className="border-red-200 text-red-800 hover:bg-red-100">
+                        Go Home
+                    </Button>
+                </Card>
+            </div>
+        )
+    }
+
     if (error || !appointment) return (
         <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
             <Card className="max-w-md w-full text-center p-8">
@@ -297,6 +358,16 @@ export default function ReschedulePage() {
                         <div className="flex items-center gap-3 text-gray-600">
                             <Clock className="w-5 h-5 text-gray-400" />
                             <span>{eventType?.duration || 30} mins</span>
+                        </div>
+
+                        <div className="pt-6 mt-6 border-t border-gray-100">
+                            <Button
+                                variant="outline"
+                                className="w-full text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+                                onClick={() => setCancelDialogOpen(true)}
+                            >
+                                Cancel Appointment
+                            </Button>
                         </div>
                     </div>
                 </div>
@@ -359,6 +430,23 @@ export default function ReschedulePage() {
                     )}
                 </div>
             </Card>
+
+            <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Cancel Appointment</DialogTitle>
+                        <DialogDescription>
+                            Are you sure you want to cancel this appointment? This action cannot be undone.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setCancelDialogOpen(false)}>Keep Appointment</Button>
+                        <Button variant="destructive" onClick={handleCancelAppointment} disabled={isCancelling}>
+                            {isCancelling ? "Cancelling..." : "Yes, Cancel Appointment"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

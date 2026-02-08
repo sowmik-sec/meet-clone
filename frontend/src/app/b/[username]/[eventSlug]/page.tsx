@@ -82,14 +82,14 @@ export default function BookingPage() {
             if (!userId || !selectedDate) return;
             try {
                 const dateStr = format(selectedDate, 'yyyy-MM-dd');
-                const slots = await appointmentApi.getBookedSlots(userId, dateStr);
+                const slots = await appointmentApi.getBookedSlots(userId, dateStr, eventType?.id);
                 setBookedSlots(slots);
             } catch (error) {
                 console.error('Failed to fetch booked slots', error);
             }
         };
         fetchBookedSlots();
-    }, [userId, selectedDate]);
+    }, [userId, selectedDate, eventType]);
 
     const getAvailableSlots = () => {
         if (!availability || !selectedDate || !eventType) return [];
@@ -139,7 +139,10 @@ export default function BookingPage() {
                 // Increment by 30 mins or duration? 
                 // Typically you want start times every 15/30/60 mins irrelevant of duration.
                 // Let's use 30 min step for now, or 15 if duration is small.
-                const step = durationMin <= 15 ? 15 : 30;
+                // Use duration + buffers as step to ensure back-to-back booking availability
+                // const step = durationMin;
+                const totalBuffer = (eventType.buffer_before || 0) + (eventType.buffer_after || 0);
+                const step = durationMin + totalBuffer;
                 current = new Date(current.getTime() + step * 60 * 1000);
             }
         });
@@ -153,10 +156,17 @@ export default function BookingPage() {
         const slotStart = new Date(`${dateStr}T${timeStr}:00`);
         const slotEnd = new Date(slotStart.getTime() + eventType.duration * 60 * 1000);
 
+        // Include buffer before and after for the new slot
+        const bufferBefore = (eventType.buffer_before || 0) * 60 * 1000;
+        const bufferAfter = (eventType.buffer_after || 0) * 60 * 1000;
+        const bufferedStart = new Date(slotStart.getTime() - bufferBefore);
+        const bufferedEnd = new Date(slotEnd.getTime() + bufferAfter);
+
         return !bookedSlots?.some(([start, end]) => {
             const bookedStart = new Date(start);
             const bookedEnd = new Date(end);
-            return (slotStart < bookedEnd && slotEnd > bookedStart);
+            // Check if the buffered slot overlaps with any booked slot
+            return (bufferedStart < bookedEnd && bufferedEnd > bookedStart);
         });
     };
 
@@ -182,7 +192,7 @@ export default function BookingPage() {
             const dateStr = format(selectedDate, 'yyyy-MM-dd');
             const startDateTime = new Date(`${dateStr}T${selectedSlot}:00`);
 
-            await appointmentApi.createPublicBooking(userId, {
+            const appt = await appointmentApi.createPublicBooking(userId, {
                 guest_name: name,
                 guest_email: email,
                 start_time: startDateTime.toISOString(),
@@ -190,7 +200,11 @@ export default function BookingPage() {
                 event_type_id: eventType?.id || '',
             });
 
-            toast({ title: "Booking Confirmed", description: "You will receive an email shortly." });
+            if (appt.status === 'pending') {
+                toast({ title: "Booking Requested", description: "Your booking is pending approval. You will receive an email shortly." });
+            } else {
+                toast({ title: "Booking Confirmed", description: "You will receive an email shortly." });
+            }
 
             // Reset
             setName('');

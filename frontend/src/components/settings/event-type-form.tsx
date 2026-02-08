@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,6 +47,7 @@ export function EventTypeForm({ open, onOpenChange, eventType, onSuccess }: Even
             min_cancel_notice: eventType.min_cancel_notice,
             min_reschedule_notice: eventType.min_reschedule_notice,
             allow_guest_cancel: eventType.allow_guest_cancel,
+            max_attendees: eventType.max_attendees,
         } : {
             duration: 30,
             buffer_before: 0,
@@ -55,8 +56,37 @@ export function EventTypeForm({ open, onOpenChange, eventType, onSuccess }: Even
             min_cancel_notice: 0, // Default: anytime
             min_reschedule_notice: 0, // Default: anytime
             allow_guest_cancel: true, // Default: allowed
+            max_attendees: 1, // Default: 1:1
         }
     });
+
+    // Reset form when eventType changes or modal opens
+    useEffect(() => {
+        if (open) {
+            reset(eventType ? {
+                title: eventType.title,
+                slug: eventType.slug,
+                description: eventType.description,
+                duration: eventType.duration,
+                buffer_before: eventType.buffer_before,
+                buffer_after: eventType.buffer_after,
+                color: eventType.color,
+                min_cancel_notice: eventType.min_cancel_notice,
+                min_reschedule_notice: eventType.min_reschedule_notice,
+                allow_guest_cancel: eventType.allow_guest_cancel,
+                max_attendees: eventType.max_attendees,
+            } : {
+                duration: 30,
+                buffer_before: 0,
+                buffer_after: 0,
+                color: "#000000",
+                min_cancel_notice: 0,
+                min_reschedule_notice: 0,
+                allow_guest_cancel: true,
+                max_attendees: 1,
+            });
+        }
+    }, [eventType, open, reset]);
 
     const onSubmit = async (data: CreateEventTypeRequest) => {
         setLoading(true);
@@ -100,6 +130,30 @@ export function EventTypeForm({ open, onOpenChange, eventType, onSuccess }: Even
                         <Input id="slug" {...register("slug", { required: true })} placeholder="e.g. quick-chat" />
                         {errors.slug && <span className="text-sm text-red-500">Slug is required</span>}
                     </div>
+
+                    <div className="grid gap-2">
+                        <Label htmlFor="max_attendees">Max Attendees</Label>
+                        <Select
+                            onValueChange={(val: string) => setValue("max_attendees", parseInt(val))}
+                            defaultValue={eventType?.max_attendees?.toString() || "1"}
+                        >
+                            <SelectTrigger>
+                                <SelectValue placeholder="1 (One-on-One)" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="1">1 (One-on-One)</SelectItem>
+                                <SelectItem value="2">2 Attendees</SelectItem>
+                                <SelectItem value="5">5 Attendees</SelectItem>
+                                <SelectItem value="10">10 Attendees</SelectItem>
+                                <SelectItem value="20">20 Attendees</SelectItem>
+                                <SelectItem value="50">50 Attendees</SelectItem>
+                                <SelectItem value="100">100 Attendees (Webinar)</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <p className="text-xs text-gray-500">Set to more than 1 for group sessions.</p>
+                    </div>
+
+
 
                     <div className="grid gap-2">
                         <Label htmlFor="duration">Duration (minutes)</Label>
