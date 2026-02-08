@@ -14,6 +14,7 @@ export interface EventType {
     min_cancel_notice: number;
     min_reschedule_notice: number;
     allow_guest_cancel: boolean;
+    max_attendees: number;
 }
 
 export interface CreateEventTypeRequest {
@@ -27,6 +28,7 @@ export interface CreateEventTypeRequest {
     min_cancel_notice: number;
     min_reschedule_notice: number;
     allow_guest_cancel: boolean;
+    max_attendees: number;
 }
 
 export interface UpdateEventTypeRequest {
@@ -41,4 +43,5 @@ export interface UpdateEventTypeRequest {
     min_cancel_notice?: number;
     min_reschedule_notice?: number;
     allow_guest_cancel?: boolean;
+    max_attendees?: number;
 }

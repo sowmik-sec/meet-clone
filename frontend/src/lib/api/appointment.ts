@@ -34,8 +34,12 @@ export const appointmentApi = {
         const response = await api.post<Appointment>(`/users/${userId}/bookings`, data);
         return response.data;
     },
-    getBookedSlots: async (userId: string, date: string): Promise<string[][]> => {
-        const response = await api.get<string[][]>(`/users/${userId}/booked-slots?date=${date}`);
+    getBookedSlots: async (userId: string, date: string, eventTypeId?: string): Promise<string[][]> => {
+        let url = `/users/${userId}/booked-slots?date=${date}`;
+        if (eventTypeId) {
+            url += `&event_type_id=${eventTypeId}`;
+        }
+        const response = await api.get<string[][]>(url);
         return response.data;
     },
 
@@ -47,6 +51,10 @@ export const appointmentApi = {
     rescheduleAppointment: async (token: string, newStartTime: string): Promise<Appointment> => {
         const response = await api.post<Appointment>(`/appointments/reschedule/${token}`, { new_start_time: newStartTime });
         return response.data;
+    },
+
+    cancelAppointmentByToken: async (token: string): Promise<void> => {
+        await api.delete(`/appointments/reschedule/${token}`);
     },
 
     getAppointment: async (id: string): Promise<Appointment> => {
