@@ -1,3 +1,13 @@
+export type QuestionType = 'text' | 'phone' | 'select';
+
+export interface BookingQuestion {
+    id: string;
+    label: string;
+    type: QuestionType;
+    required: boolean;
+    options?: string[];
+}
+
 export interface EventType {
     id: string;
     user_id: string;
@@ -15,6 +25,7 @@ export interface EventType {
     min_reschedule_notice: number;
     allow_guest_cancel: boolean;
     max_attendees: number;
+    questions: BookingQuestion[];
 }
 
 export interface CreateEventTypeRequest {
@@ -29,6 +40,7 @@ export interface CreateEventTypeRequest {
     min_reschedule_notice: number;
     allow_guest_cancel: boolean;
     max_attendees: number;
+    questions: BookingQuestion[];
 }
 
 export interface UpdateEventTypeRequest {
@@ -44,4 +56,5 @@ export interface UpdateEventTypeRequest {
     min_reschedule_notice?: number;
     allow_guest_cancel?: boolean;
     max_attendees?: number;
+    questions?: BookingQuestion[];
 }

@@ -21,6 +21,11 @@ export const eventTypesApi = {
         await api.delete(`/event-types/${id}`);
     },
 
+    getById: async (id: string) => {
+        const response = await api.get<EventType>(`/event-types/${id}`);
+        return response.data;
+    },
+
     listPublic: async (userId: string) => {
         const response = await api.get<EventType[]>(`/users/${userId}/event-types`);
         return response.data;

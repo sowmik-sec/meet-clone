@@ -57,6 +57,7 @@ func (s *service) CreateEventType(ctx context.Context, userID string, req Create
 		MinRescheduleNotice: req.MinRescheduleNotice,
 		AllowGuestCancel:    req.AllowGuestCancel,
 		MaxAttendees:        maxAttendees,
+		Questions:           req.Questions,
 		CreatedAt:           time.Now(),
 		UpdatedAt:           time.Now(),
 	}
@@ -145,6 +146,9 @@ func (s *service) UpdateEventType(ctx context.Context, id, userID string, req Up
 		} else {
 			et.MaxAttendees = *req.MaxAttendees
 		}
+	}
+	if req.Questions != nil {
+		et.Questions = *req.Questions
 	}
 	et.UpdatedAt = time.Now()
 
