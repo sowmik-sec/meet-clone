@@ -34,12 +34,12 @@ export const appointmentApi = {
         const response = await api.post<Appointment>(`/users/${userId}/bookings`, data);
         return response.data;
     },
-    getBookedSlots: async (userId: string, date: string, eventTypeId?: string): Promise<string[][]> => {
+    getBookedSlots: async (userId: string, date: string, eventTypeId?: string): Promise<{ busy_slots: string[][], partial_slots: Record<string, number> }> => {
         let url = `/users/${userId}/booked-slots?date=${date}`;
         if (eventTypeId) {
             url += `&event_type_id=${eventTypeId}`;
         }
-        const response = await api.get<string[][]>(url);
+        const response = await api.get<{ busy_slots: string[][], partial_slots: Record<string, number> }>(url);
         return response.data;
     },
 

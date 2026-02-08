@@ -50,6 +50,7 @@ export default function BookingPage() {
     const [email, setEmail] = useState('');
     const [loading, setLoading] = useState(true);
     const [bookedSlots, setBookedSlots] = useState<string[][]>([]);
+    const [partialSlots, setPartialSlots] = useState<Record<string, number>>({});
 
     // View state: 'calendar' or 'form'
     const [view, setView] = useState<'calendar' | 'form'>('calendar');
@@ -82,8 +83,9 @@ export default function BookingPage() {
             if (!userId || !selectedDate) return;
             try {
                 const dateStr = format(selectedDate, 'yyyy-MM-dd');
-                const slots = await appointmentApi.getBookedSlots(userId, dateStr, eventType?.id);
-                setBookedSlots(slots);
+                const response = await appointmentApi.getBookedSlots(userId, dateStr, eventType?.id);
+                setBookedSlots(response.busy_slots || []);
+                setPartialSlots(response.partial_slots || {});
             } catch (error) {
                 console.error('Failed to fetch booked slots', error);
             }
@@ -282,6 +284,8 @@ export default function BookingPage() {
                                     selectedSlot={selectedSlot}
                                     onSelectSlot={handleSlotSelect}
                                     isSlotAvailable={isSlotAvailable}
+                                    partialSlots={partialSlots} // Pass partial slots map
+                                    maxAttendees={eventType?.max_attendees || 1} // Pass max attendees
                                 />
                             </div>
                         </div>
