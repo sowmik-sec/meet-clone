@@ -6,9 +6,11 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { appointmentApi } from '@/lib/api/appointment';
 import { Appointment } from '@/types/appointment';
+import { EventType } from '@/types/event-type';
 import { useAuth } from '@/hooks/useAuth';
-import { Calendar, Clock, Video, Users, Plus } from 'lucide-react';
+import { Calendar, Clock, Video, Users, Plus, FileText } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { eventTypesApi } from '@/lib/api/event-types';
 import {
     Dialog,
     DialogContent,
@@ -37,6 +39,8 @@ export default function SchedulePage() {
     const [appointments, setAppointments] = useState<Appointment[]>([]);
     const [loading, setLoading] = useState(true);
     const [cancelId, setCancelId] = useState<string | null>(null);
+    const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
+    const [selectedEventType, setSelectedEventType] = useState<EventType | null>(null);
     const [activeTab, setActiveTab] = useState<'upcoming' | 'pending' | 'cancelled'>('upcoming');
 
     useEffect(() => {
@@ -143,6 +147,19 @@ export default function SchedulePage() {
         }
     };
 
+    const handleViewDetails = async (appt: Appointment) => {
+        setSelectedAppointment(appt);
+        setSelectedEventType(null); // Reset
+        if (appt.event_type_id) {
+            try {
+                const et = await eventTypesApi.getById(appt.event_type_id);
+                setSelectedEventType(et);
+            } catch (error) {
+                console.error("Failed to load event type details", error);
+            }
+        }
+    };
+
     if (!hasHydrated || loading) {
         return <div className="p-8">Loading schedule...</div>;
     }
@@ -220,6 +237,7 @@ export default function SchedulePage() {
                                         {appt.description && <p className="mt-2 text-gray-600">{appt.description}</p>}
                                     </div>
                                     <div className="flex gap-2">
+                                        <Button variant="outline" onClick={() => handleViewDetails(appt)}>View Details</Button>
                                         {appt.status === 'confirmed' && doesMeetingAllowStart(appt.start_time, appt.end_time) && (
                                             <Button onClick={() => handleStartMeeting(appt.id)}>Start</Button>
                                         )}
@@ -255,7 +273,61 @@ export default function SchedulePage() {
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>
+
+                <Dialog open={!!selectedAppointment} onOpenChange={(open) => !open && setSelectedAppointment(null)}>
+                    <DialogContent className="sm:max-w-md">
+                        <DialogHeader>
+                            <DialogTitle>Appointment Details</DialogTitle>
+                        </DialogHeader>
+                        {selectedAppointment && (
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-2 gap-4 text-sm">
+                                    <div>
+                                        <label className="text-gray-500 font-medium block">Guest</label>
+                                        <div className="font-semibold">{selectedAppointment.title}</div>
+                                    </div>
+                                    <div>
+                                        <label className="text-gray-500 font-medium block">Time</label>
+                                        <div>{new Date(selectedAppointment.start_time).toLocaleDateString()}</div>
+                                        <div className="text-gray-500">
+                                            {new Date(selectedAppointment.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} -
+                                            {new Date(selectedAppointment.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        </div>
+                                    </div>
+                                    {selectedAppointment.description && (
+                                        <div className="col-span-2">
+                                            <label className="text-gray-500 font-medium block">Description</label>
+                                            <div>{selectedAppointment.description}</div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {selectedAppointment.answers && Object.keys(selectedAppointment.answers).length > 0 && (
+                                    <div className="border-t pt-4 mt-4">
+                                        <h4 className="font-semibold mb-3 text-sm">Questions & Answers</h4>
+                                        <div className="space-y-3">
+                                            {Object.entries(selectedAppointment.answers).map(([qId, answer]) => {
+                                                const question = selectedEventType?.questions?.find(q => q.id === qId);
+                                                return (
+                                                    <div key={qId} className="bg-gray-50 p-3 rounded-md">
+                                                        <p className="text-xs text-gray-500 font-medium mb-1">
+                                                            {question ? question.label : "Question"}
+                                                        </p>
+                                                        <p className="text-sm text-gray-900">{String(answer)}</p>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        <DialogFooter>
+                            <Button onClick={() => setSelectedAppointment(null)}>Close</Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
             </div>
-        </div>
+        </div >
     );
 }

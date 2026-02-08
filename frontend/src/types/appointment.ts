@@ -14,6 +14,7 @@ export interface Appointment {
     updated_at: string;
     event_type_id?: string;
     reschedule_token?: string;
+    answers?: Record<string, string>;
 }
 
 export interface CreateAppointmentRequest {

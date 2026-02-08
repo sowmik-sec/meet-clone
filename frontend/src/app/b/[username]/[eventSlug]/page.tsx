@@ -10,12 +10,21 @@ import { useToast } from '@/components/ui/use-toast';
 import api from '@/lib/api/client';
 import { eventTypesApi } from '@/lib/api/event-types';
 import { appointmentApi } from '@/lib/api/appointment';
+import { userApi, PublicProfile } from '@/lib/api/user';
 import { HostInfoCard } from '@/components/booking/host-info-card';
 import { BookingCalendar } from '@/components/booking/booking-calendar';
 import { TimeSlotGrid } from '@/components/booking/time-slot-grid';
 import { ArrowLeft, Calendar as CalendarIcon, Clock } from 'lucide-react';
 import { format } from 'date-fns';
 import { EventType } from '@/types/event-type';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 
 interface TimeSlot {
     start: string;
@@ -43,6 +52,7 @@ export default function BookingPage() {
 
     const { toast } = useToast();
     const [availability, setAvailability] = useState<Availability | null>(null);
+    const [hostProfile, setHostProfile] = useState<PublicProfile | null>(null);
     const [eventType, setEventType] = useState<EventType | null>(null);
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
     const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
@@ -51,6 +61,7 @@ export default function BookingPage() {
     const [loading, setLoading] = useState(true);
     const [bookedSlots, setBookedSlots] = useState<string[][]>([]);
     const [partialSlots, setPartialSlots] = useState<Record<string, number>>({});
+    const [answers, setAnswers] = useState<Record<string, string>>({});
 
     // View state: 'calendar' or 'form'
     const [view, setView] = useState<'calendar' | 'form'>('calendar');
@@ -68,6 +79,14 @@ export default function BookingPage() {
                     // Only fetch availability if we found the event type
                     const res = await api.get<Availability>(`/users/${userId}/availability`);
                     setAvailability(res.data);
+
+                    // Fetch host profile
+                    try {
+                        const profile = await userApi.getPublicProfile(userId);
+                        setHostProfile(profile);
+                    } catch (err) {
+                        console.error("Failed to fetch host profile", err);
+                    }
                 }
             } catch (error) {
                 console.error("Failed to load booking data", error);
@@ -189,6 +208,19 @@ export default function BookingPage() {
 
     const handleBook = async () => {
         if (!selectedSlot || !selectedDate) return;
+
+        // Client-side validation
+        if (!name || !email) {
+            toast({ title: "Missing Information", description: "Please enter your name and email.", variant: "destructive" });
+            return;
+        }
+
+        const missingRequired = (eventType?.questions || []).some(q => q.required && !answers[q.id]);
+        if (missingRequired) {
+            toast({ title: "Missing Information", description: "Please answer all required questions.", variant: "destructive" });
+            return;
+        }
+
         setLoading(true);
         try {
             const dateStr = format(selectedDate, 'yyyy-MM-dd');
@@ -200,6 +232,7 @@ export default function BookingPage() {
                 start_time: startDateTime.toISOString(),
                 timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
                 event_type_id: eventType?.id || '',
+                answers: answers,
             });
 
             if (appt.status === 'pending') {
@@ -257,7 +290,9 @@ export default function BookingPage() {
                 <div className="w-full md:w-1/3 bg-white border-b md:border-b-0 md:border-r border-gray-100">
                     <HostInfoCard
                         hostId={userId}
-                        hostName={userId} // TODO: Fetch real name
+                        hostName={hostProfile?.name}
+                        hostAvatar={hostProfile?.avatar}
+                        hostBio={hostProfile?.bio}
                         description={eventType ? eventType.description : "Welcome to my scheduling page."}
                         duration={eventType?.duration}
                         title={eventType?.title}
@@ -339,9 +374,42 @@ export default function BookingPage() {
                                         className="h-11"
                                     />
                                 </div>
+                                {eventType?.questions?.map((q) => (
+                                    <div key={q.id} className="space-y-2">
+                                        <Label htmlFor={q.id}>
+                                            {q.label}
+                                            {q.required && <span className="text-red-500 ml-1">*</span>}
+                                        </Label>
+                                        {q.type === 'select' ? (
+                                            <Select
+                                                onValueChange={(val) => setAnswers(prev => ({ ...prev, [q.id]: val }))}
+                                                value={answers[q.id] || ''}
+                                            >
+                                                <SelectTrigger className="h-11">
+                                                    <SelectValue placeholder="Select an option" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {q.options?.map((opt) => (
+                                                        <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        ) : (
+                                            <Input
+                                                id={q.id}
+                                                type={q.type === 'phone' ? 'tel' : 'text'}
+                                                value={answers[q.id] || ''}
+                                                onChange={(e) => setAnswers(prev => ({ ...prev, [q.id]: e.target.value }))}
+                                                placeholder={q.type === 'phone' ? '+1 (555) 000-0000' : ''}
+                                                className="h-11"
+                                                required={q.required}
+                                            />
+                                        )}
+                                    </div>
+                                ))}
                                 <Button
                                     className="w-full h-11 mt-4 text-base"
-                                    disabled={!name || !email}
+                                    disabled={!name || !email || (eventType?.questions || []).some(q => q.required && !answers[q.id])}
                                     onClick={handleBook}
                                 >
                                     Confirm Booking

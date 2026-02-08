@@ -78,6 +78,19 @@ export function Navigation() {
                                 <Clock className="w-4 h-4 mr-2" />
                                 Event Types
                             </Link>
+
+                            <Link
+                                href="/settings/profile"
+                                className={cn(
+                                    "inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium",
+                                    isActive('/settings/profile')
+                                        ? "border-blue-500 text-gray-900"
+                                        : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
+                                )}
+                            >
+                                <Clock className="w-4 h-4 mr-2" />
+                                Profile
+                            </Link>
                         </div>
                     </div>
                     <div className="hidden sm:ml-6 sm:flex sm:items-center space-x-4">

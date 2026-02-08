@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Clock, ChevronRight, Video } from "lucide-react";
 
 import { eventTypesApi } from "@/lib/api/event-types";
+import { userApi } from "@/lib/api/user";
 import { EventType } from "@/types/event-type";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -17,13 +18,24 @@ export default function BookingProfilePage() {
     const [eventTypes, setEventTypes] = useState<EventType[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(false);
+    const [profile, setProfile] = useState<{ name: string; avatar: string; bio: string } | null>(null);
 
     useEffect(() => {
-        const fetchEventTypes = async () => {
+        const fetchData = async () => {
             try {
                 if (!username) return;
+
+                // Fetch event types
                 const data = await eventTypesApi.listPublic(username);
                 setEventTypes(data.filter(et => et.is_active));
+
+                // Fetch profile
+                try {
+                    const profileData = await userApi.getPublicProfile(username);
+                    setProfile(profileData);
+                } catch (err) {
+                    console.error("Failed to load profile", err);
+                }
             } catch (err) {
                 console.error("Failed to load event types", err);
                 setError(true);
@@ -32,7 +44,7 @@ export default function BookingProfilePage() {
             }
         };
 
-        fetchEventTypes();
+        fetchData();
     }, [username]);
 
     if (loading) {
@@ -40,22 +52,28 @@ export default function BookingProfilePage() {
             <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
                 <div className="max-w-xl w-full space-y-4">
                     <div className="flex justify-center mb-8">
-                        <Skeleton className="h-20 w-20 rounded-full" />
+                        <Skeleton className="h-24 w-24 rounded-full" />
                     </div>
-                    <Skeleton className="h-32 w-full rounded-lg" />
-                    <Skeleton className="h-32 w-full rounded-lg" />
+                    <div className="space-y-2 text-center">
+                        <Skeleton className="h-8 w-48 mx-auto" />
+                        <Skeleton className="h-4 w-64 mx-auto" />
+                    </div>
+                    <div className="mt-8 space-y-4">
+                        <Skeleton className="h-32 w-full rounded-lg" />
+                        <Skeleton className="h-32 w-full rounded-lg" />
+                    </div>
                 </div>
             </div>
         );
     }
 
-    if (error || eventTypes.length === 0) {
+    if (error || (eventTypes.length === 0 && !profile)) {
         return (
             <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
                 <Card className="max-w-md w-full text-center p-8">
-                    <CardTitle className="text-xl mb-2">No event types found</CardTitle>
+                    <CardTitle className="text-xl mb-2">User not found</CardTitle>
                     <CardDescription>
-                        This user hasn't set up any public event types yet.
+                        We couldn't find the user you're looking for.
                     </CardDescription>
                 </Card>
             </div>
@@ -70,19 +88,23 @@ export default function BookingProfilePage() {
                         <Video className="w-6 h-6" />
                         <span>Meet Clone</span>
                     </div>
-                    {/* Optional: Add Login link here later if needed */}
                 </div>
             </header>
             <div className="flex-1 flex flex-col items-center py-12 px-4 sm:px-6 lg:px-8">
                 <div className="w-full max-w-2xl space-y-8">
                     <div className="text-center">
                         <Avatar className="h-24 w-24 mx-auto border-4 border-white shadow-sm">
-                            <AvatarImage src={`https://ui-avatars.com/api/?name=User&background=random`} />
-                            <AvatarFallback>U</AvatarFallback>
+                            <AvatarImage src={profile?.avatar || `https://ui-avatars.com/api/?name=${profile?.name || 'User'}&background=random`} />
+                            <AvatarFallback>{(profile?.name || 'User').substring(0, 2).toUpperCase()}</AvatarFallback>
                         </Avatar>
-                        <h1 className="mt-4 text-2xl font-bold text-gray-900">Book a Meeting</h1>
-                        <p className="mt-2 text-gray-600">
-                            Select an event type to schedule a time.
+                        <h1 className="mt-4 text-3xl font-bold text-gray-900">{profile?.name || 'Welcome'}</h1>
+                        {profile?.bio && (
+                            <p className="mt-4 text-gray-600 max-w-lg mx-auto leading-relaxed">
+                                {profile.bio}
+                            </p>
+                        )}
+                        <p className="mt-6 text-sm font-medium text-gray-400 uppercase tracking-widest">
+                            Select an event type
                         </p>
                     </div>
 
