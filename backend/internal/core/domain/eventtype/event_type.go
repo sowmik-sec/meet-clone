@@ -19,6 +19,7 @@ type EventType struct {
 	MinCancelNotice     int    `json:"min_cancel_notice" bson:"min_cancel_notice"`         // hours
 	MinRescheduleNotice int    `json:"min_reschedule_notice" bson:"min_reschedule_notice"` // hours
 	AllowGuestCancel    bool   `json:"allow_guest_cancel" bson:"allow_guest_cancel"`
+	MaxAttendees        int    `json:"max_attendees" bson:"max_attendees"` // 1 = 1:1, >1 = group session
 
 	CreatedAt time.Time `json:"created_at" bson:"created_at"`
 	UpdatedAt time.Time `json:"updated_at" bson:"updated_at"`
@@ -35,6 +36,7 @@ type CreateEventTypeRequest struct {
 	MinCancelNotice     int    `json:"min_cancel_notice"`
 	MinRescheduleNotice int    `json:"min_reschedule_notice"`
 	AllowGuestCancel    bool   `json:"allow_guest_cancel"`
+	MaxAttendees        int    `json:"max_attendees"`
 }
 
 type UpdateEventTypeRequest struct {
@@ -49,6 +51,7 @@ type UpdateEventTypeRequest struct {
 	MinCancelNotice     *int    `json:"min_cancel_notice"`
 	MinRescheduleNotice *int    `json:"min_reschedule_notice"`
 	AllowGuestCancel    *bool   `json:"allow_guest_cancel"`
+	MaxAttendees        *int    `json:"max_attendees"`
 }
 
 type Repository interface {

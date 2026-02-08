@@ -37,6 +37,10 @@ func (s *service) CreateEventType(ctx context.Context, userID string, req Create
 	if existing != nil {
 		return nil, errors.New("slug already exists")
 	}
+	maxAttendees := req.MaxAttendees
+	if maxAttendees <= 0 {
+		maxAttendees = 1 // Default to 1:1 meeting
+	}
 
 	et := &EventType{
 		ID:                  uuid.New().String(),
@@ -52,6 +56,7 @@ func (s *service) CreateEventType(ctx context.Context, userID string, req Create
 		MinCancelNotice:     req.MinCancelNotice,
 		MinRescheduleNotice: req.MinRescheduleNotice,
 		AllowGuestCancel:    req.AllowGuestCancel,
+		MaxAttendees:        maxAttendees,
 		CreatedAt:           time.Now(),
 		UpdatedAt:           time.Now(),
 	}
@@ -132,6 +137,14 @@ func (s *service) UpdateEventType(ctx context.Context, id, userID string, req Up
 	}
 	if req.AllowGuestCancel != nil {
 		et.AllowGuestCancel = *req.AllowGuestCancel
+	}
+	if req.MaxAttendees != nil {
+		if *req.MaxAttendees <= 0 {
+			val := 1
+			et.MaxAttendees = val
+		} else {
+			et.MaxAttendees = *req.MaxAttendees
+		}
 	}
 	et.UpdatedAt = time.Now()
 

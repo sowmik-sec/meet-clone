@@ -16,6 +16,7 @@ type Event struct {
 	Start       time.Time
 	End         time.Time
 	Attendees   []string
+	ID          string
 }
 
 type Service interface {
@@ -25,6 +26,7 @@ type Service interface {
 	GetAuthURL(state string) string
 	ExchangeToken(ctx context.Context, code string) (*oauth2.Token, error)
 	GetBusyTimes(ctx context.Context, token *oauth2.Token, start, end time.Time) ([]TimePeriod, error)
+	ListEvents(ctx context.Context, token *oauth2.Token, start, end time.Time) ([]Event, error)
 }
 
 type TimePeriod struct {
@@ -161,4 +163,47 @@ func (s *googleService) GetBusyTimes(ctx context.Context, token *oauth2.Token, s
 	}
 
 	return busyTimes, nil
+}
+
+func (s *googleService) ListEvents(ctx context.Context, token *oauth2.Token, start, end time.Time) ([]Event, error) {
+	client := s.config.Client(ctx, token)
+	srv, err := calendar.NewService(ctx, option.WithHTTPClient(client))
+	if err != nil {
+		return nil, err
+	}
+
+	events, err := srv.Events.List("primary").
+		ShowDeleted(false).
+		SingleEvents(true).
+		TimeMin(start.Format(time.RFC3339)).
+		TimeMax(end.Format(time.RFC3339)).
+		Context(ctx).
+		Do()
+	if err != nil {
+		return nil, err
+	}
+
+	var result []Event
+	for _, item := range events.Items {
+		var start, end time.Time
+		if item.Start.DateTime != "" {
+			start, _ = time.Parse(time.RFC3339, item.Start.DateTime)
+		} else {
+			start, _ = time.Parse("2006-01-02", item.Start.Date)
+		}
+		if item.End.DateTime != "" {
+			end, _ = time.Parse(time.RFC3339, item.End.DateTime)
+		} else {
+			end, _ = time.Parse("2006-01-02", item.End.Date)
+		}
+
+		result = append(result, Event{
+			Summary:     item.Summary,
+			Description: item.Description,
+			Start:       start,
+			End:         end,
+			ID:          item.Id,
+		})
+	}
+	return result, nil
 }
