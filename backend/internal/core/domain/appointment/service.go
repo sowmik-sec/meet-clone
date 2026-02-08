@@ -56,10 +56,11 @@ type Service interface {
 	ConfirmAppointment(ctx context.Context, id, hostID string) error
 	StartAppointment(ctx context.Context, id, userID string) (string, error) // Returns room ID
 	CreatePublicBooking(ctx context.Context, hostID string, req CreatePublicBookingRequest) (*Appointment, error)
-	GetBookedSlots(ctx context.Context, userID string, date string) ([][]string, error)
+	GetBookedSlots(ctx context.Context, userID string, date string, eventTypeID string) ([][]string, error)
 	GetAppointmentByRoomID(ctx context.Context, roomID string) (*Appointment, error)
 	RescheduleAppointment(ctx context.Context, token string, newStart time.Time) (*Appointment, error)
 	GetAppointmentByRescheduleToken(ctx context.Context, token string) (*Appointment, error)
+	CancelAppointmentByToken(ctx context.Context, token string) error
 }
 
 // Service Implementation
@@ -202,6 +203,10 @@ func (s *service) CancelAppointment(ctx context.Context, id, userID string) erro
 	if strings.Contains(appt.GuestID, "@") {
 		s.emailService.SendAppointmentCancellation(appt.GuestID, appt.Title, appt.StartTime.String())
 	}
+
+	// Sync Cancellation to Google Calendar
+	s.syncCancellationToGoogleCalendar(ctx, appt)
+
 	return nil
 }
 
@@ -308,6 +313,21 @@ func (s *service) CreatePublicBooking(ctx context.Context, hostID string, req Cr
 			duration = time.Duration(et.Duration) * time.Minute
 			bufferBefore = et.BufferBefore
 			bufferAfter = et.BufferAfter
+
+			// Check group session capacity
+			if et.MaxAttendees > 1 {
+				count, _ := s.repo.CountBookingsForSlot(ctx, hostID, req.StartTime, req.StartTime.Add(duration))
+				if count >= et.MaxAttendees {
+					return nil, errors.New("this time slot is fully booked")
+				}
+			}
+
+			// Check if THIS guest has already booked this slot
+			// We prevent the same email from taking multiple spots in a group session
+			hasBooking, _ := s.repo.HasBookingForSlot(ctx, hostID, req.GuestEmail, req.StartTime, req.StartTime.Add(duration))
+			if hasBooking {
+				return nil, errors.New("you have already booked this time slot")
+			}
 		}
 	}
 
@@ -315,15 +335,27 @@ func (s *service) CreatePublicBooking(ctx context.Context, hostID string, req Cr
 
 	// Check for conflicts
 	// Use Buffered times for conflict check
+	// Only check for conflicts if it's NOT a group session (or capacity < 1 which implies single)
+	// For group sessions, we already checked capacity above.
 	checkStart := req.StartTime.Add(-time.Duration(bufferBefore) * time.Minute)
 	checkEnd := endTime.Add(time.Duration(bufferAfter) * time.Minute)
 
-	hasConflict, err := s.repo.HasConflict(ctx, hostID, checkStart.Format(time.RFC3339), checkEnd.Format(time.RFC3339))
-	if err != nil {
-		return nil, err
+	shouldCheckConflict := true
+	if req.EventTypeID != "" {
+		et, err := s.eventTypeRepo.GetByID(ctx, req.EventTypeID)
+		if err == nil && et != nil && et.MaxAttendees > 1 {
+			shouldCheckConflict = false
+		}
 	}
-	if hasConflict {
-		return nil, errors.New("selected time slot is no longer available")
+
+	if shouldCheckConflict {
+		hasConflict, err := s.repo.HasConflict(ctx, hostID, checkStart.Format(time.RFC3339), checkEnd.Format(time.RFC3339))
+		if err != nil {
+			return nil, err
+		}
+		if hasConflict {
+			return nil, errors.New("selected time slot is no longer available")
+		}
 	}
 
 	appt := NewAppointment(
@@ -418,14 +450,83 @@ func (s *service) syncToGoogleCalendar(ctx context.Context, appt *Appointment) {
 	}
 }
 
-func (s *service) GetBookedSlots(ctx context.Context, userID string, date string) ([][]string, error) {
-	// 1. Get internal booked slots
-	internalSlots, err := s.repo.GetBookedSlots(ctx, userID, date)
+func (s *service) syncCancellationToGoogleCalendar(ctx context.Context, appt *Appointment) {
+	if appt.GoogleEventID == "" {
+		return
+	}
+
+	host, err := s.userRepo.FindByID(ctx, appt.HostID)
+	if err == nil && host != nil && host.GoogleAccessToken != "" {
+		token := &oauth2.Token{
+			AccessToken:  host.GoogleAccessToken,
+			RefreshToken: host.GoogleRefreshToken,
+			Expiry:       host.GoogleTokenExpiry,
+			TokenType:    "Bearer",
+		}
+
+		err := s.calendar.DeleteEvent(ctx, token, appt.GoogleEventID)
+		if err != nil {
+			// logger.Error("Failed to delete Google Calendar event: %v", err)
+		} else {
+			// Clear the GoogleEventID from the appointment since it's deleted
+			appt.GoogleEventID = ""
+			_ = s.repo.Update(ctx, appt)
+		}
+	}
+}
+
+func (s *service) GetBookedSlots(ctx context.Context, userID string, date string, eventTypeID string) ([][]string, error) {
+	// 1. Get all appointments for the day
+	appointments, err := s.repo.FindAppointmentsByDate(ctx, userID, date)
 	if err != nil {
 		return nil, err
 	}
 
-	// 2. Get Google Calendar busy times
+	// 2. Determine MaxAttendees
+	maxAttendees := 1
+	if eventTypeID != "" {
+		et, err := s.eventTypeRepo.GetByID(ctx, eventTypeID)
+		if err == nil && et != nil {
+			maxAttendees = et.MaxAttendees
+		}
+	}
+	if maxAttendees <= 0 {
+		maxAttendees = 1
+	}
+
+	// 3. Process appointments to find BUSY slots
+	var busySlots [][]string
+	slotCounts := make(map[string]int)
+
+	for _, appt := range appointments {
+		// If it's a booking for the SAME event type, it only blocks if capacity is reached.
+		// If it's a booking for a DIFFERENT event type (or manual), it blocks completely.
+		isSameEventType := eventTypeID != "" && appt.EventTypeID == eventTypeID
+
+		if isSameEventType {
+			// Key by start|end time
+			key := fmt.Sprintf("%s|%s", appt.BufferedStartTime.Format(time.RFC3339), appt.BufferedEndTime.Format(time.RFC3339))
+			slotCounts[key]++
+		} else {
+			// Different event type = Always Busy
+			busySlots = append(busySlots, []string{
+				appt.BufferedStartTime.Format(time.RFC3339),
+				appt.BufferedEndTime.Format(time.RFC3339),
+			})
+		}
+	}
+
+	// Add slots that reached capacity
+	for key, count := range slotCounts {
+		if count >= maxAttendees {
+			parts := strings.Split(key, "|")
+			if len(parts) == 2 {
+				busySlots = append(busySlots, []string{parts[0], parts[1]})
+			}
+		}
+	}
+
+	// 4. Get Google Calendar busy times
 	user, err := s.userRepo.FindByID(ctx, userID)
 	if err == nil && user != nil && user.GoogleAccessToken != "" {
 		// Use Google Calendar API
@@ -436,23 +537,38 @@ func (s *service) GetBookedSlots(ctx context.Context, userID string, date string
 			TokenType:    "Bearer",
 		}
 
-		startOfDay, _ := time.Parse("2006-01-02", date)
-		endOfDay := startOfDay.Add(24 * time.Hour)
+		// Calculate start and end of day in UTC for Google query
+		parsedDate, _ := time.Parse("2006-01-02", date)
+		dayStart := parsedDate
+		dayEnd := parsedDate.Add(24 * time.Hour)
 
-		busyTimes, err := s.calendar.GetBusyTimes(ctx, token, startOfDay, endOfDay)
+		// Collect Google Event IDs to ignore (appointments for the same event type)
+		ignoredEventIDs := make(map[string]bool)
+		for _, appt := range appointments {
+			// We only ignore the calendar event if checking availability for the SAME event type.
+			if eventTypeID != "" && appt.EventTypeID == eventTypeID && appt.GoogleEventID != "" {
+				ignoredEventIDs[appt.GoogleEventID] = true
+			}
+		}
+
+		// Use ListEvents
+		googleEvents, err := s.calendar.ListEvents(ctx, token, dayStart, dayEnd)
+
 		if err == nil {
-			for _, busy := range busyTimes {
-				internalSlots = append(internalSlots, []string{
-					busy.Start.Format(time.RFC3339),
-					busy.End.Format(time.RFC3339),
+			for _, event := range googleEvents {
+				// ID Check: Is this one of our own group-session bookings?
+				if ignoredEventIDs[event.ID] {
+					continue
+				}
+
+				// If not ignored, it's a blocker.
+				busySlots = append(busySlots, []string{
+					event.Start.Format(time.RFC3339),
 				})
 			}
-		} else {
-			// logger.Error.Printf("Failed to fetch Google Calendar busy times: %v", err)
 		}
 	}
-
-	return internalSlots, nil
+	return busySlots, nil
 }
 
 func (s *service) GetAppointmentByRoomID(ctx context.Context, roomID string) (*Appointment, error) {
@@ -548,4 +664,50 @@ func (s *service) RescheduleAppointment(ctx context.Context, token string, newSt
 
 func (s *service) GetAppointmentByRescheduleToken(ctx context.Context, token string) (*Appointment, error) {
 	return s.repo.FindByRescheduleToken(ctx, token)
+}
+
+func (s *service) CancelAppointmentByToken(ctx context.Context, token string) error {
+	appt, err := s.repo.FindByRescheduleToken(ctx, token)
+	if err != nil {
+		return err
+	}
+	if appt == nil {
+		return errors.New("invalid token")
+	}
+
+	// Check cancellation policy
+	eventType, err := s.eventTypeRepo.GetByID(ctx, appt.EventTypeID)
+	if err == nil && eventType != nil {
+		if !eventType.AllowGuestCancel {
+			return errors.New("this event type does not allow guest cancellation")
+		}
+		if eventType.MinCancelNotice > 0 {
+			minTime := time.Now().Add(time.Duration(eventType.MinCancelNotice) * time.Hour)
+			if appt.StartTime.Before(minTime) {
+				return errors.New("cannot cancel within notice period")
+			}
+		}
+	}
+
+	appt.Status = StatusCancelled
+	appt.UpdatedAt = time.Now()
+
+	if err := s.repo.Update(ctx, appt); err != nil {
+		return err
+	}
+
+	// Send Cancellation Email
+	if strings.Contains(appt.GuestID, "@") {
+		s.emailService.SendAppointmentCancellation(appt.GuestID, appt.Title, appt.StartTime.Format("Jan 2, 2006 at 3:04 PM"))
+	}
+	// Notify Host
+	hostUser, err := s.userRepo.FindByID(ctx, appt.HostID)
+	if err == nil && hostUser != nil {
+		s.emailService.SendAppointmentCancellation(hostUser.Email, appt.Title+" (Cancelled by Guest)", appt.StartTime.Format("Jan 2, 2006 at 3:04 PM"))
+	}
+
+	// Sync Cancellation to Google Calendar
+	s.syncCancellationToGoogleCalendar(ctx, appt)
+
+	return nil
 }

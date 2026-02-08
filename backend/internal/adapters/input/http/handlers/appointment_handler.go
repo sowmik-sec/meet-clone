@@ -176,13 +176,14 @@ func (h *AppointmentHandler) GetBookedSlots(w http.ResponseWriter, r *http.Reque
 	vars := mux.Vars(r)
 	hostID := vars["userId"]
 	date := r.URL.Query().Get("date")
+	eventTypeID := r.URL.Query().Get("event_type_id")
 
 	if date == "" {
 		respondError(w, errors.NewBadRequestError("date is required", nil), http.StatusBadRequest)
 		return
 	}
 
-	slots, err := h.service.GetBookedSlots(r.Context(), hostID, date)
+	slots, err := h.service.GetBookedSlots(r.Context(), hostID, date, eventTypeID)
 	if err != nil {
 		respondError(w, errors.NewInternalError("failed to get booked slots", err), http.StatusInternalServerError)
 		return
@@ -227,4 +228,16 @@ func (h *AppointmentHandler) GetAppointmentByRescheduleToken(w http.ResponseWrit
 	}
 
 	respondJSON(w, appt, http.StatusOK)
+}
+
+func (h *AppointmentHandler) CancelAppointmentByToken(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	token := vars["token"]
+
+	if err := h.service.CancelAppointmentByToken(r.Context(), token); err != nil {
+		respondError(w, errors.NewInternalError("failed to cancel appointment", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
 }

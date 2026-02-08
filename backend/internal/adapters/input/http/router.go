@@ -147,6 +147,7 @@ func (r *Router) Setup() http.Handler {
 	api.HandleFunc("/users/{userId}/event-types", r.eventTypeHandler.GetPublicEventTypes).Methods("GET")
 	api.HandleFunc("/appointments/reschedule/{token}", r.appointmentHandler.GetAppointmentByRescheduleToken).Methods("GET")
 	api.HandleFunc("/appointments/reschedule/{token}", r.appointmentHandler.RescheduleAppointment).Methods("POST")
+	api.HandleFunc("/appointments/reschedule/{token}", r.appointmentHandler.CancelAppointmentByToken).Methods("DELETE")
 	api.HandleFunc("/appointments/{id}", r.appointmentHandler.GetAppointment).Methods("GET")
 
 	// Protected routes - Event Types

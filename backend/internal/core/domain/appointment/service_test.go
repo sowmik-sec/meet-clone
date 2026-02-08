@@ -64,9 +64,17 @@ func (m *MockRepository) FindUpcoming(ctx context.Context, start, end time.Time)
 	}
 	return args.Get(0).([]Appointment), args.Error(1)
 }
-func (m *MockRepository) GetBookedSlots(ctx context.Context, userID string, date string) ([][]string, error) {
+func (m *MockRepository) FindAppointmentsByDate(ctx context.Context, userID string, date string) ([]Appointment, error) {
 	args := m.Called(ctx, userID, date)
-	return args.Get(0).([][]string), args.Error(1)
+	return args.Get(0).([]Appointment), args.Error(1)
+}
+func (m *MockRepository) CountBookingsForSlot(ctx context.Context, hostID string, startTime, endTime time.Time) (int, error) {
+	args := m.Called(ctx, hostID, startTime, endTime)
+	return args.Int(0), args.Error(1)
+}
+func (m *MockRepository) HasBookingForSlot(ctx context.Context, hostID, guestEmail string, startTime, endTime time.Time) (bool, error) {
+	args := m.Called(ctx, hostID, guestEmail, startTime, endTime)
+	return args.Bool(0), args.Error(1)
 }
 
 // Mock EventTypeRepo

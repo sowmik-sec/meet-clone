@@ -125,7 +125,7 @@ func (r *appointmentRepository) HasConflict(ctx context.Context, userID string, 
 	return count > 0, nil
 }
 
-func (r *appointmentRepository) GetBookedSlots(ctx context.Context, userID string, date string) ([][]string, error) {
+func (r *appointmentRepository) FindAppointmentsByDate(ctx context.Context, userID string, date string) ([]appointment.Appointment, error) {
 	// Parse date (YYYY-MM-DD)
 	startOfDay, err := time.Parse("2006-01-02", date)
 	if err != nil {
@@ -157,14 +157,10 @@ func (r *appointmentRepository) GetBookedSlots(ctx context.Context, userID strin
 		return nil, err
 	}
 
-	var slots [][]string
-	for _, appt := range appointments {
-		slots = append(slots, []string{
-			appt.BufferedStartTime.Format(time.RFC3339),
-			appt.BufferedEndTime.Format(time.RFC3339),
-		})
+	if appointments == nil {
+		appointments = []appointment.Appointment{}
 	}
-	return slots, nil
+	return appointments, nil
 }
 
 func (r *appointmentRepository) FindUpcoming(ctx context.Context, start, end time.Time) ([]appointment.Appointment, error) {
@@ -218,4 +214,27 @@ func (r *appointmentRepository) FindByRescheduleToken(ctx context.Context, token
 		return nil, err
 	}
 	return &appt, nil
+}
+
+func (r *appointmentRepository) CountBookingsForSlot(ctx context.Context, hostID string, startTime, endTime time.Time) (int, error) {
+	query := bson.M{
+		"host_id":    hostID,
+		"start_time": startTime,
+		"end_time":   endTime,
+		"status":     bson.M{"$ne": appointment.StatusCancelled},
+	}
+	count, err := r.collection.CountDocuments(ctx, query)
+	return int(count), err
+}
+
+func (r *appointmentRepository) HasBookingForSlot(ctx context.Context, hostID, guestEmail string, startTime, endTime time.Time) (bool, error) {
+	query := bson.M{
+		"host_id":    hostID,
+		"guest_id":   guestEmail, // GuestID stores email for public bookings
+		"start_time": startTime,
+		"end_time":   endTime,
+		"status":     bson.M{"$ne": appointment.StatusCancelled},
+	}
+	count, err := r.collection.CountDocuments(ctx, query)
+	return count > 0, err
 }

@@ -18,8 +18,10 @@ type Repository interface {
 	Update(ctx context.Context, appointment *Appointment) error
 	Delete(ctx context.Context, id string) error
 	HasConflict(ctx context.Context, userID string, startTime, endTime string) (bool, error)
-	GetBookedSlots(ctx context.Context, userID string, date string) ([][]string, error)
+	FindAppointmentsByDate(ctx context.Context, userID string, date string) ([]Appointment, error)
 	FindUpcoming(ctx context.Context, start, end time.Time) ([]Appointment, error)
 	FindByRoomID(ctx context.Context, roomID string) (*Appointment, error)
 	FindByRescheduleToken(ctx context.Context, token string) (*Appointment, error)
+	CountBookingsForSlot(ctx context.Context, hostID string, startTime, endTime time.Time) (int, error)
+	HasBookingForSlot(ctx context.Context, hostID, guestEmail string, startTime, endTime time.Time) (bool, error)
 }
