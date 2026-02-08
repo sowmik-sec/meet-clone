@@ -183,13 +183,18 @@ func (h *AppointmentHandler) GetBookedSlots(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	slots, err := h.service.GetBookedSlots(r.Context(), hostID, date, eventTypeID)
+	busySlots, partialSlots, err := h.service.GetBookedSlots(r.Context(), hostID, date, eventTypeID)
 	if err != nil {
 		respondError(w, errors.NewInternalError("failed to get booked slots", err), http.StatusInternalServerError)
 		return
 	}
 
-	respondJSON(w, slots, http.StatusOK)
+	response := map[string]interface{}{
+		"busy_slots":    busySlots,
+		"partial_slots": partialSlots,
+	}
+
+	respondJSON(w, response, http.StatusOK)
 }
 
 func (h *AppointmentHandler) RescheduleAppointment(w http.ResponseWriter, r *http.Request) {

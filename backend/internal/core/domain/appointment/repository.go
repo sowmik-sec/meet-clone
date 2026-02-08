@@ -24,4 +24,5 @@ type Repository interface {
 	FindByRescheduleToken(ctx context.Context, token string) (*Appointment, error)
 	CountBookingsForSlot(ctx context.Context, hostID string, startTime, endTime time.Time) (int, error)
 	HasBookingForSlot(ctx context.Context, hostID, guestEmail string, startTime, endTime time.Time) (bool, error)
+	FindBySlot(ctx context.Context, hostID string, startTime, endTime time.Time) ([]Appointment, error)
 }

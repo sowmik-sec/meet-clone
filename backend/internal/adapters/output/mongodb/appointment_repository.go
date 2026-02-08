@@ -112,7 +112,8 @@ func (r *appointmentRepository) HasConflict(ctx context.Context, userID string, 
 			{"host_id": userID},
 			{"guest_id": userID},
 		},
-		"status":              appointment.StatusConfirmed,
+		// Check for status NOT equal to Cancelled (so Pending + Confirmed both block)
+		"status":              bson.M{"$ne": appointment.StatusCancelled},
 		"buffered_start_time": bson.M{"$lt": end},
 		"buffered_end_time":   bson.M{"$gt": start},
 	}
@@ -138,7 +139,8 @@ func (r *appointmentRepository) FindAppointmentsByDate(ctx context.Context, user
 			{"host_id": userID},
 			{"guest_id": userID},
 		},
-		"status": appointment.StatusConfirmed,
+		// remove status filter to get all (confirmed, pending, cancelled)
+		// we filter in service level
 		"buffered_start_time": bson.M{
 			"$gte": startOfDay,
 			"$lt":  endOfDay,
@@ -237,4 +239,27 @@ func (r *appointmentRepository) HasBookingForSlot(ctx context.Context, hostID, g
 	}
 	count, err := r.collection.CountDocuments(ctx, query)
 	return count > 0, err
+}
+
+func (r *appointmentRepository) FindBySlot(ctx context.Context, hostID string, startTime, endTime time.Time) ([]appointment.Appointment, error) {
+	query := bson.M{
+		"host_id":    hostID,
+		"start_time": startTime,
+		"end_time":   endTime,
+		"status":     bson.M{"$ne": appointment.StatusCancelled},
+	}
+	cursor, err := r.collection.Find(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var appointments []appointment.Appointment
+	if err = cursor.All(ctx, &appointments); err != nil {
+		return nil, err
+	}
+	if appointments == nil {
+		appointments = []appointment.Appointment{}
+	}
+	return appointments, nil
 }

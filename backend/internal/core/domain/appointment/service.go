@@ -56,7 +56,7 @@ type Service interface {
 	ConfirmAppointment(ctx context.Context, id, hostID string) error
 	StartAppointment(ctx context.Context, id, userID string) (string, error) // Returns room ID
 	CreatePublicBooking(ctx context.Context, hostID string, req CreatePublicBookingRequest) (*Appointment, error)
-	GetBookedSlots(ctx context.Context, userID string, date string, eventTypeID string) ([][]string, error)
+	GetBookedSlots(ctx context.Context, userID string, date string, eventTypeID string) ([][]string, map[string]int, error)
 	GetAppointmentByRoomID(ctx context.Context, roomID string) (*Appointment, error)
 	RescheduleAppointment(ctx context.Context, token string, newStart time.Time) (*Appointment, error)
 	GetAppointmentByRescheduleToken(ctx context.Context, token string) (*Appointment, error)
@@ -270,22 +270,53 @@ func (s *service) StartAppointment(ctx context.Context, id, userID string) (stri
 	}
 
 	// Create room if not exists
+	// Create room if not exists
+	// Check if ANY appointment in this slot (Host + StartTime) already has a RoomID
+	// This ensures that for group sessions, all participants join the SAME room.
 	if appt.RoomID == "" {
-		roomType := room.RoomTypeMeeting
-		if appt.MeetingType == "webinar" {
-			roomType = room.RoomTypeWebinar
-		}
-
-		newRoom, err := s.roomService.CreateRoom(ctx, userID, roomType)
+		// Find all appointments for this slot
+		slotAppts, err := s.repo.FindBySlot(ctx, appt.HostID, appt.StartTime, appt.EndTime)
 		if err != nil {
 			return "", err
 		}
-		appt.RoomID = newRoom.ID
-		// Should we update status? Maybe.
 
+		var existingRoomID string
+		for _, a := range slotAppts {
+			if a.RoomID != "" {
+				existingRoomID = a.RoomID
+				break
+			}
+		}
+
+		if existingRoomID != "" {
+			appt.RoomID = existingRoomID
+		} else {
+			// No room exists for this slot yet, create one
+			roomType := room.RoomTypeMeeting
+			if appt.MeetingType == "webinar" {
+				roomType = room.RoomTypeWebinar
+			}
+
+			newRoom, err := s.roomService.CreateRoom(ctx, userID, roomType)
+			if err != nil {
+				return "", err
+			}
+			appt.RoomID = newRoom.ID
+		}
+
+		// Update THIS appointment with the room ID
 		if err := s.repo.Update(ctx, appt); err != nil {
 			return "", err
 		}
+
+		// OPTIONAL: We could proactively update ALL other appointments in the slot to have this RoomID
+		// so that if a guest checks their status, they see the RoomID even before Host clicks "Start"
+		// on their specific record.
+		// For now, let's keep it simple: When Host starts *any* record, it will find the room or create it.
+		// But wait, if Host starts record A, it gets Room X.
+		// If Host later "starts" record B (or if we iterate), record B should find Room X.
+		// The loop above handles that (finds existingRoomID).
+		// So this logic is sufficient for consistent room usage.
 	}
 
 	return appt.RoomID, nil
@@ -403,49 +434,111 @@ func (s *service) CreatePublicBooking(ctx context.Context, hostID string, req Cr
 
 func (s *service) syncToGoogleCalendar(ctx context.Context, appt *Appointment) {
 	host, err := s.userRepo.FindByID(ctx, appt.HostID)
-	if err == nil && host != nil && host.GoogleAccessToken != "" {
-		token := &oauth2.Token{
-			AccessToken:  host.GoogleAccessToken,
-			RefreshToken: host.GoogleRefreshToken,
-			Expiry:       host.GoogleTokenExpiry,
-			TokenType:    "Bearer",
-		}
+	if err != nil || host == nil || host.GoogleAccessToken == "" {
+		return
+	}
 
-		event := calendar.Event{
-			Summary:     appt.Title, // For public booking, Title is Guest Name
-			Description: appt.Description,
-			Start:       appt.StartTime,
-			End:         appt.EndTime,
-			Attendees:   []string{},
-		}
+	token := &oauth2.Token{
+		AccessToken:  host.GoogleAccessToken,
+		RefreshToken: host.GoogleRefreshToken,
+		Expiry:       host.GoogleTokenExpiry,
+		TokenType:    "Bearer",
+	}
 
-		// If guest ID is email, add it
-		if strings.Contains(appt.GuestID, "@") {
-			event.Attendees = append(event.Attendees, appt.GuestID)
-		} else {
-			// Try to fetch guest user
-			guest, err := s.userRepo.FindByID(ctx, appt.GuestID)
+	// 1. Find all appointments for this slot to aggregate attendees & find canonical Google Event ID
+	slotAppts, err := s.repo.FindBySlot(ctx, appt.HostID, appt.StartTime, appt.EndTime)
+	if err != nil {
+		// logger.Error("Failed to find slot appointments: %v", err)
+		return
+	}
+
+	var canonicalEventID string
+	var attendees []string
+	seenAttendees := make(map[string]bool)
+
+	// Helper to add attendee
+	addAttendee := func(guestID string) {
+		email := guestID
+		if !strings.Contains(guestID, "@") {
+			guest, err := s.userRepo.FindByID(ctx, guestID)
 			if err == nil && guest != nil {
-				event.Attendees = append(event.Attendees, guest.Email)
+				email = guest.Email
 			}
 		}
+		if email != "" && !seenAttendees[email] {
+			attendees = append(attendees, email)
+			seenAttendees[email] = true
+		}
+	}
 
-		if appt.GoogleEventID != "" {
-			// Update existing event
-			err := s.calendar.UpdateEvent(ctx, token, appt.GoogleEventID, event)
-			if err != nil {
-				// logger.Error("Failed to update Google Calendar event: %v", err)
+	// Iterate over all appointments in the slot
+	// This includes the current 'appt' since it should be saved in DB by now (called after Create/Update)
+	for _, a := range slotAppts {
+		// Skip cancelled appointments for attendee list (though they might hold the EventID? No, we ignore cancelled)
+		if a.Status == StatusCancelled {
+			continue
+		}
+
+		if a.GoogleEventID != "" {
+			canonicalEventID = a.GoogleEventID
+		}
+		addAttendee(a.GuestID)
+	}
+
+	// If the current appt has an ID that differs from canonical, we might have a split.
+	// We prioritize the canonical one found from the group.
+	// If 'appt' is new, it has no ID, so we use canonical.
+	if appt.GoogleEventID == "" && canonicalEventID != "" {
+		appt.GoogleEventID = canonicalEventID
+		// We should persist this adoption immediately so future syncs see it
+		_ = s.repo.Update(ctx, appt)
+	}
+	// If appt has ID and canonical is empty (it's the first one), canonical becomes appt.GoogleEventID
+	if canonicalEventID == "" && appt.GoogleEventID != "" {
+		canonicalEventID = appt.GoogleEventID
+	}
+
+	event := calendar.Event{
+		Summary:     appt.Title, // Use title of the current one, or maybe generic?
+		Description: appt.Description,
+		Start:       appt.StartTime,
+		End:         appt.EndTime,
+		Attendees:   attendees,
+	}
+
+	// For group sessions, the Title might be "Group Session" or similar?
+	// If we use appt.Title which is "Guest Name", it renames the event to the latest guest.
+	// Ideally it should be "Meeting with [Guest]..." or "Group Session".
+	// Checking MeetingType or Title...
+	// But for now, updating it to the latest applicant is fine or we keep existing summary?
+	// Let's rely on appt.Title for now.
+
+	if canonicalEventID != "" {
+		// Update existing event
+		err := s.calendar.UpdateEvent(ctx, token, canonicalEventID, event)
+		if err != nil {
+			// If update fails (e.g. deleted on Google side), should we create new?
+			// For now, allow failing.
+			// logger.Error("Failed to update Google Calendar event: %v", err)
+		}
+	} else {
+		// Create new event
+		id, _, err := s.calendar.CreateEvent(ctx, token, event)
+		if err != nil {
+			// logger.Error("Failed to create Google Calendar event: %v", err)
+			return
+		}
+		// Update appointment with Google Event ID
+		appt.GoogleEventID = id
+		_ = s.repo.Update(ctx, appt)
+
+		// Also update other appointments in the slot?
+		// Iterate slotAppts and update them if they lack ID?
+		for _, a := range slotAppts {
+			if a.ID != appt.ID && a.GoogleEventID == "" && a.Status != StatusCancelled {
+				a.GoogleEventID = id
+				_ = s.repo.Update(ctx, &a)
 			}
-		} else {
-			// Create new event
-			id, _, err := s.calendar.CreateEvent(ctx, token, event)
-			if err != nil {
-				// logger.Error("Failed to create Google Calendar event: %v", err)
-				return
-			}
-			// Update appointment with Google Event ID
-			appt.GoogleEventID = id
-			_ = s.repo.Update(ctx, appt) // Persist the ID
 		}
 	}
 }
@@ -475,11 +568,11 @@ func (s *service) syncCancellationToGoogleCalendar(ctx context.Context, appt *Ap
 	}
 }
 
-func (s *service) GetBookedSlots(ctx context.Context, userID string, date string, eventTypeID string) ([][]string, error) {
+func (s *service) GetBookedSlots(ctx context.Context, userID string, date string, eventTypeID string) ([][]string, map[string]int, error) {
 	// 1. Get all appointments for the day
 	appointments, err := s.repo.FindAppointmentsByDate(ctx, userID, date)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// 2. Determine MaxAttendees
@@ -494,21 +587,26 @@ func (s *service) GetBookedSlots(ctx context.Context, userID string, date string
 		maxAttendees = 1
 	}
 
-	// 3. Process appointments to find BUSY slots
+	// 3. Process appointments to find BUSY slots and PARTIAL slots
 	var busySlots [][]string
+	partialSlots := make(map[string]int)
 	slotCounts := make(map[string]int)
 
 	for _, appt := range appointments {
+		if appt.Status == StatusCancelled {
+			continue
+		}
+
 		// If it's a booking for the SAME event type, it only blocks if capacity is reached.
 		// If it's a booking for a DIFFERENT event type (or manual), it blocks completely.
 		isSameEventType := eventTypeID != "" && appt.EventTypeID == eventTypeID
 
 		if isSameEventType {
-			// Key by start|end time
-			key := fmt.Sprintf("%s|%s", appt.BufferedStartTime.Format(time.RFC3339), appt.BufferedEndTime.Format(time.RFC3339))
+			// Key by start|end time (Use Actual Start Time, not Buffered, so frontend can match it)
+			key := fmt.Sprintf("%s|%s", appt.StartTime.Format(time.RFC3339), appt.EndTime.Format(time.RFC3339))
 			slotCounts[key]++
 		} else {
-			// Different event type = Always Busy
+			// Different event type = Always Busy (Use Buffered Time to block overlaps)
 			busySlots = append(busySlots, []string{
 				appt.BufferedStartTime.Format(time.RFC3339),
 				appt.BufferedEndTime.Format(time.RFC3339),
@@ -516,13 +614,16 @@ func (s *service) GetBookedSlots(ctx context.Context, userID string, date string
 		}
 	}
 
-	// Add slots that reached capacity
+	// Add slots that reached capacity to busySlots, and others to partialSlots
 	for key, count := range slotCounts {
 		if count >= maxAttendees {
 			parts := strings.Split(key, "|")
 			if len(parts) == 2 {
 				busySlots = append(busySlots, []string{parts[0], parts[1]})
 			}
+		} else {
+			// It is partially booked
+			partialSlots[key] = count
 		}
 	}
 
@@ -545,8 +646,15 @@ func (s *service) GetBookedSlots(ctx context.Context, userID string, date string
 		// Collect Google Event IDs to ignore (appointments for the same event type)
 		ignoredEventIDs := make(map[string]bool)
 		for _, appt := range appointments {
+			// If appointment is cancelled, ALWAYS ignore its Google Event (ghost event should not block)
+			if appt.Status == StatusCancelled && appt.GoogleEventID != "" {
+				ignoredEventIDs[appt.GoogleEventID] = true
+				continue
+			}
+
 			// We only ignore the calendar event if checking availability for the SAME event type.
 			if eventTypeID != "" && appt.EventTypeID == eventTypeID && appt.GoogleEventID != "" {
+
 				ignoredEventIDs[appt.GoogleEventID] = true
 			}
 		}
@@ -568,7 +676,7 @@ func (s *service) GetBookedSlots(ctx context.Context, userID string, date string
 			}
 		}
 	}
-	return busySlots, nil
+	return busySlots, partialSlots, nil
 }
 
 func (s *service) GetAppointmentByRoomID(ctx context.Context, roomID string) (*Appointment, error) {

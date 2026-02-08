@@ -76,6 +76,10 @@ func (m *MockRepository) HasBookingForSlot(ctx context.Context, hostID, guestEma
 	args := m.Called(ctx, hostID, guestEmail, startTime, endTime)
 	return args.Bool(0), args.Error(1)
 }
+func (m *MockRepository) FindBySlot(ctx context.Context, hostID string, startTime, endTime time.Time) ([]Appointment, error) {
+	args := m.Called(ctx, hostID, startTime, endTime)
+	return args.Get(0).([]Appointment), args.Error(1)
+}
 
 // Mock EventTypeRepo
 type MockEventTypeRepo struct {
