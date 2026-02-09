@@ -16,7 +16,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { EndMeetingModal } from '@/components/dashboard/EndMeetingModal';
 import { MeetingCreatedModal } from '@/components/dashboard/MeetingCreatedModal';
-import BandwidthStatsCard from '@/components/dashboard/BandwidthStatsCard';
+import UsageSummaryCard from '@/components/dashboard/UsageSummaryCard';
+import UsageHistoryTable from '@/components/dashboard/UsageHistoryTable';
 
 import { Navigation } from '@/components/ui/Navigation';
 
@@ -154,8 +155,9 @@ export default function DashboardPage() {
           <p className="text-gray-600">Here's what's happening today.</p>
         </header>
 
-        <div className="mb-8 p-6 bg-gray-900 rounded-xl shadow-lg text-white">
-          <BandwidthStatsCard />
+        <div className="mb-8">
+          <UsageSummaryCard />
+          <UsageHistoryTable />
         </div>
 
         <div className="flex justify-between items-center mb-4">
