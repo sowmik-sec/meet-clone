@@ -101,8 +101,8 @@ export default function ReschedulePage() {
             if (!appointment?.host_id || !selectedDate) return;
             try {
                 const dateStr = format(selectedDate, 'yyyy-MM-dd');
-                const slots = await appointmentApi.getBookedSlots(appointment.host_id, dateStr);
-                setBookedSlots(slots);
+                const response = await appointmentApi.getBookedSlots(appointment.host_id, dateStr);
+                setBookedSlots(response.busy_slots);
             } catch (error) {
                 console.error('Failed to fetch booked slots', error);
             }

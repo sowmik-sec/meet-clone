@@ -2,6 +2,7 @@ package room
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/meet-clone/backend/internal/pkg/errors"
 )
@@ -21,13 +22,19 @@ type Service interface {
 	DenyParticipant(ctx context.Context, roomID, hostID, userID string) error
 }
 
-type service struct {
-	repo Repository
+type CallsManager interface {
+	DeleteSession(sessionID string) error
 }
 
-func NewService(repo Repository) Service {
+type service struct {
+	repo         Repository
+	callsManager CallsManager
+}
+
+func NewService(repo Repository, callsManager CallsManager) Service {
 	return &service{
-		repo: repo,
+		repo:         repo,
+		callsManager: callsManager,
 	}
 }
 
@@ -120,6 +127,20 @@ func (s *service) GetUserRooms(ctx context.Context, userID string) ([]*Room, err
 	return rooms, nil
 }
 
+func (s *service) SetSessionID(ctx context.Context, roomID, sessionID string) error {
+	room, err := s.repo.FindByID(ctx, roomID)
+	if err != nil {
+		return errors.NewNotFoundError("room not found")
+	}
+
+	room.CloudflareSessionID = sessionID
+	if err := s.repo.Update(ctx, room); err != nil {
+		return errors.NewInternalError("failed to update room session id", err)
+	}
+
+	return nil
+}
+
 func (s *service) EndRoom(ctx context.Context, roomID, userID string) error {
 	room, err := s.repo.FindByID(ctx, roomID)
 	if err != nil {
@@ -134,6 +155,14 @@ func (s *service) EndRoom(ctx context.Context, roomID, userID string) error {
 
 	if err := s.repo.Update(ctx, room); err != nil {
 		return errors.NewInternalError("failed to end room", err)
+	}
+
+	// Also delete Cloudflare session to kick everyone out
+	if room.CloudflareSessionID != "" && s.callsManager != nil {
+		if err := s.callsManager.DeleteSession(room.CloudflareSessionID); err != nil {
+			// Log error but don't fail, DB state is already updated
+			fmt.Printf("Failed to delete Cloudflare session %s: %v\n", room.CloudflareSessionID, err)
+		}
 	}
 
 	return nil

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useRealtimeKitClient, RealtimeKitProvider, useRealtimeKitMeeting } from '@cloudflare/realtimekit-react';
 import { Button } from '@/components/ui/button';
@@ -13,17 +13,117 @@ import { useAuthStore } from '@/store/authStore';
 import { roomApi } from '@/lib/api/room';
 import { callsApi } from '@/lib/api/calls';
 import { AxiosError } from 'axios';
-import { useBandwidthStats } from '@/hooks/useBandwidthStats';
 import { WaitingParticipant } from '@/types/room';
 import { useToast } from '@/components/ui/use-toast';
 
-function MeetingUI() {
+function MeetingUI({ isCreator }: { isCreator: boolean }) {
   const { meeting } = useRealtimeKitMeeting();
   const params = useParams();
   const roomId = params.id as string;
 
-  // Start collecting bandwidth stats
-  useBandwidthStats(roomId);
+  const meetingRef = useRef<HTMLElement>(null);
+  const isLeavingRef = useRef(false);
+
+  useEffect(() => {
+    // Determine the element to attach listeners to (fallback to window or document if ref is null)
+    const element = meetingRef.current;
+
+    // DEBUG: Log all events to see what's happening
+    const logEvent = (e: Event) => {
+      console.log('[RoomPage] Event fired:', e.type, e);
+    };
+    if (element) {
+      element.addEventListener('change', logEvent);
+      element.addEventListener('click', logEvent);
+    }
+
+    const checkStateAndLeave = async (state: string) => {
+      if (isLeavingRef.current) return;
+
+      if (state === 'disconnected' || state === 'closed' || state === 'failed' || state === 'left' || state === 'ended') {
+        isLeavingRef.current = true;
+        console.log('[RoomPage] State indicates disconnect/end. Leaving room...');
+        try {
+          if (isCreator && (state === 'left' || state === 'ended')) {
+            // If creator intentionally manually leaves or ends for all, end meeting for all in backend
+            await roomApi.endRoom(roomId);
+          } else {
+            await roomApi.leaveRoom(roomId);
+          }
+          window.location.href = '/dashboard';
+        } catch (err) {
+          console.error('Failed to leave/end room:', err);
+          window.location.href = '/dashboard';
+          isLeavingRef.current = false; // Reset if it failed so we can try again if another event fires
+        }
+      }
+    };
+
+    const handleRoomLeft = async (payload: { state: 'kicked' | 'left' | 'ended' | 'unknown' }) => {
+      console.log('[RoomPage] user left the room:', payload);
+      // The payload state 'left' usually indicates an intentional click on the leave button
+      await checkStateAndLeave(payload.state);
+    };
+
+    if (meeting && meeting.self) {
+      // @ts-ignore - event name is correct as per index.d.ts
+      meeting.self.on('roomLeft', handleRoomLeft);
+    }
+
+    const handleChange = async (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const state = customEvent.detail?.state || (element as any)?.state;
+      console.log('[RoomPage] Meeting state change detected:', state, customEvent.detail);
+      await checkStateAndLeave(state);
+    };
+
+    if (element) {
+      element.addEventListener('change', handleChange);
+      element.addEventListener('rtkStatesUpdate', handleChange);
+    }
+
+    // Polling fallback: Check state every 1s in case events don't fire
+    // AND check backend room status every 5s to see if host ended it
+    const intervalId = setInterval(() => {
+      // Check both direct state property and connectionStatus if available
+      const state = (meeting as any)?.state || (meeting as any)?.connectionStatus;
+      if (state) {
+        checkStateAndLeave(state);
+      }
+    }, 1000);
+
+    const roomStatusInterval = setInterval(async () => {
+      try {
+        const roomData = await roomApi.getRoom(roomId);
+        if (roomData.status === 'ended') {
+          console.log('[RoomPage] Room ended by host. Leaving...');
+          await roomApi.leaveRoom(roomId); // Ensure backend knows we left
+          window.location.href = '/dashboard';
+        }
+      } catch (err) {
+        console.error('[RoomPage] Failed to check room status:', err);
+        // If 404, room might be gone
+        if ((err as any)?.response?.status === 404) {
+          window.location.href = '/dashboard';
+        }
+      }
+    }, 5000);
+
+    return () => {
+      clearInterval(intervalId);
+      clearInterval(roomStatusInterval);
+      if (meeting && meeting.self) {
+        // @ts-ignore
+        meeting.self.off('roomLeft', handleRoomLeft);
+      }
+      if (element) {
+        element.removeEventListener('change', logEvent);
+        element.removeEventListener('click', logEvent);
+        element.removeEventListener('change', handleChange);
+        element.removeEventListener('rtkStatesUpdate', handleChange);
+      }
+    };
+  }, [roomId, meeting]);
 
   if (!meeting) {
     return (
@@ -36,7 +136,8 @@ function MeetingUI() {
     );
   }
 
-  return <RtkMeeting meeting={meeting} />;
+  // @ts-ignore - ref is valid for HTMLRtkMeetingElement
+  return <RtkMeeting ref={meetingRef} meeting={meeting} />;
 }
 
 export default function RoomPage() {
@@ -199,7 +300,7 @@ export default function RoomPage() {
         clearInterval(approvalPollInterval);
       }
       clearInterval(waitingPollInterval);
-      if (isAuthenticated) {
+      if (isAuthenticated && !isCreator) {
         roomApi.leaveRoom(roomId).catch(err => {
           console.error('Failed to leave room on unmount:', err);
         });
@@ -258,8 +359,9 @@ export default function RoomPage() {
   return (
     <>
       <RealtimeKitProvider value={meeting}>
-        <MeetingUI />
+        <MeetingUI isCreator={isCreator} />
       </RealtimeKitProvider>
+
 
       {/* Waiting participants panel for creator */}
       {isCreator && waitingParticipants.length > 0 && (
