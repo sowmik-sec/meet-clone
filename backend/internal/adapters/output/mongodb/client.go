@@ -87,21 +87,39 @@ func (c *Client) CreateIndexes(ctx context.Context) error {
 		return err
 	}
 
-	// Bandwidth usage indexes
-	bandwidthIndexes := []mongo.IndexModel{
+	// Billing: Session indexes
+	sessionIndexes := []mongo.IndexModel{
 		{
+			// For finding active session: user_id + room_id + left_at (sparse for missing left_at)
 			Keys: bson.D{
 				{Key: "user_id", Value: 1},
 				{Key: "room_id", Value: 1},
-				{Key: "session_id", Value: 1},
+				{Key: "left_at", Value: 1},
+			},
+		},
+		{
+			// For aggregation: user_id + billing_period
+			Keys: bson.D{
+				{Key: "user_id", Value: 1},
+				{Key: "billing_period", Value: 1},
+			},
+		},
+	}
+	if _, err := c.db.Collection("meeting_sessions").Indexes().CreateMany(ctx, sessionIndexes); err != nil {
+		return err
+	}
+
+	// Billing: Period indexes
+	periodIndexes := []mongo.IndexModel{
+		{
+			Keys: bson.D{
+				{Key: "user_id", Value: 1},
+				{Key: "billing_period", Value: 1},
 			},
 			Options: options.Index().SetUnique(true),
 		},
-		{
-			Keys: bson.D{{Key: "user_id", Value: 1}},
-		},
 	}
-	if _, err := c.db.Collection("bandwidth_usage").Indexes().CreateMany(ctx, bandwidthIndexes); err != nil {
+	if _, err := c.db.Collection("user_billing_periods").Indexes().CreateMany(ctx, periodIndexes); err != nil {
 		return err
 	}
 
