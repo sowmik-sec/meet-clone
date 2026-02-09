@@ -12,11 +12,12 @@ import (
 	"github.com/meet-clone/backend/internal/adapters/input/http/handlers"
 	"github.com/meet-clone/backend/internal/adapters/input/http/middleware"
 	"github.com/meet-clone/backend/internal/adapters/input/websocket"
+	cfAnalytics "github.com/meet-clone/backend/internal/adapters/output/cloudflare"
 	"github.com/meet-clone/backend/internal/adapters/output/mongodb"
 	"github.com/meet-clone/backend/internal/config"
 	"github.com/meet-clone/backend/internal/core/domain/appointment"
 	"github.com/meet-clone/backend/internal/core/domain/availability"
-	"github.com/meet-clone/backend/internal/core/domain/bandwidth"
+	"github.com/meet-clone/backend/internal/core/domain/billing"
 	"github.com/meet-clone/backend/internal/core/domain/chat"
 	"github.com/meet-clone/backend/internal/core/domain/eventtype"
 	"github.com/meet-clone/backend/internal/core/domain/room"
@@ -57,7 +58,7 @@ func main() {
 	userRepo := mongodb.NewUserRepository(mongoClient)
 	roomRepo := mongodb.NewRoomRepository(mongoClient)
 	chatRepo := mongodb.NewChatRepository(mongoClient)
-	bandwidthRepo := mongodb.NewBandwidthRepository(mongoClient)
+	billingRepo := mongodb.NewBillingRepository(mongoClient.Database())
 	appointmentRepo := mongodb.NewAppointmentRepository(mongoClient.Database())
 	availabilityRepo := mongodb.NewAvailabilityRepository(mongoClient.Database())
 	eventTypeRepo := mongodb.NewEventTypeRepository(mongoClient.Database())
@@ -72,20 +73,23 @@ func main() {
 		cfg.GoogleRedirectURL,
 	)
 
-	// Initialize services
-	userService := user.NewService(userRepo)
-	roomService := room.NewService(roomRepo)
-	chatService := chat.NewService(chatRepo)
-	bandwidthService := bandwidth.NewService(bandwidthRepo)
-	appointmentService := appointment.NewService(appointmentRepo, roomService, emailService, eventTypeRepo, userRepo, availabilityRepo, googleService)
-	availabilityService := availability.NewService(availabilityRepo)
-	eventTypeService := eventtype.NewService(eventTypeRepo)
+	// Initialize Cloudflare Analytics Client
+	cfClient := cfAnalytics.NewClient(cfg)
 
 	// Initialize JWT service
 	jwtService := jwt.NewJWTService(cfg.JWTSecret, cfg.JWTExpiry)
 
 	// Initialize Cloudflare Calls service
 	callsService := cloudflare.NewCallsService(cfg.CloudflareAccountID, cfg.CloudflareAPIToken, cfg.CloudflareAppID, cfg.CloudflareAppSecret)
+
+	// Initialize services
+	userService := user.NewService(userRepo)
+	roomService := room.NewService(roomRepo, callsService)
+	chatService := chat.NewService(chatRepo)
+	billingService := billing.NewService(billingRepo, cfClient)
+	appointmentService := appointment.NewService(appointmentRepo, roomService, emailService, eventTypeRepo, userRepo, availabilityRepo, googleService)
+	availabilityService := availability.NewService(availabilityRepo)
+	eventTypeService := eventtype.NewService(eventTypeRepo)
 
 	// Initialize WebSocket hub
 	wsHub := websocket.NewHub(chatService)
@@ -112,10 +116,10 @@ func main() {
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(userService, jwtService, cfg, googleService)
 	userHandler := handlers.NewUserHandler(userService)
-	roomHandler := handlers.NewRoomHandler(roomService, appointmentService)
+	roomHandler := handlers.NewRoomHandler(roomService, appointmentService, billingService)
 	chatHandler := handlers.NewChatHandler(chatService)
-	callsHandler := handlers.NewCallsHandler(callsService, roomService)
-	bandwidthHandler := handlers.NewBandwidthHandler(bandwidthService)
+	callsHandler := handlers.NewCallsHandler(callsService, roomService, billingService)
+	billingHandler := handlers.NewBillingHandler(billingService)
 	appointmentHandler := handlers.NewAppointmentHandler(appointmentService)
 	availabilityHandler := handlers.NewAvailabilityHandler(availabilityService)
 	eventTypeHandler := handlers.NewEventTypeHandler(eventTypeService)
@@ -131,7 +135,7 @@ func main() {
 		roomHandler,
 		chatHandler,
 		callsHandler,
-		bandwidthHandler,
+		billingHandler,
 		appointmentHandler,
 		availabilityHandler,
 		eventTypeHandler,

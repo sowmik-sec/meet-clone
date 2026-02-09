@@ -9,6 +9,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/meet-clone/backend/internal/adapters/input/http/middleware"
 	"github.com/meet-clone/backend/internal/core/domain/appointment"
+	"github.com/meet-clone/backend/internal/core/domain/billing"
 	"github.com/meet-clone/backend/internal/core/domain/room"
 	"github.com/meet-clone/backend/internal/pkg/errors"
 )
@@ -16,12 +17,14 @@ import (
 type RoomHandler struct {
 	roomService        room.Service
 	appointmentService appointment.Service
+	billingService     *billing.Service
 }
 
-func NewRoomHandler(roomService room.Service, appointmentService appointment.Service) *RoomHandler {
+func NewRoomHandler(roomService room.Service, appointmentService appointment.Service, billingService *billing.Service) *RoomHandler {
 	return &RoomHandler{
 		roomService:        roomService,
 		appointmentService: appointmentService,
+		billingService:     billingService,
 	}
 }
 
@@ -162,6 +165,11 @@ func (h *RoomHandler) LeaveRoom(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// End billing session
+	if err := h.billingService.EndSession(r.Context(), claims.UserID, roomID); err != nil {
+		log.Printf("Failed to end billing session for user %s: %v", claims.UserID, err)
+	}
+
 	respondJSON(w, rm, http.StatusOK)
 }
 
@@ -183,6 +191,11 @@ func (h *RoomHandler) EndRoom(w http.ResponseWriter, r *http.Request) {
 		}
 		respondError(w, errors.NewInternalError("failed to end room", err), http.StatusInternalServerError)
 		return
+	}
+
+	// End billing session for the host
+	if err := h.billingService.EndSession(r.Context(), claims.UserID, roomID); err != nil {
+		log.Printf("Failed to end billing session for host %s: %v", claims.UserID, err)
 	}
 
 	w.WriteHeader(http.StatusNoContent)

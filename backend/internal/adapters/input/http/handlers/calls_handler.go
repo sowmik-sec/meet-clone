@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/meet-clone/backend/internal/adapters/input/http/middleware"
+	"github.com/meet-clone/backend/internal/core/domain/billing"
 	"github.com/meet-clone/backend/internal/core/domain/room"
 	"github.com/meet-clone/backend/internal/pkg/cloudflare"
 	"github.com/meet-clone/backend/internal/pkg/jwt"
@@ -13,14 +14,16 @@ import (
 )
 
 type CallsHandler struct {
-	service     *cloudflare.CallsService
-	roomService room.Service
+	service        *cloudflare.CallsService
+	roomService    room.Service
+	billingService *billing.Service
 }
 
-func NewCallsHandler(service *cloudflare.CallsService, roomService room.Service) *CallsHandler {
+func NewCallsHandler(service *cloudflare.CallsService, roomService room.Service, billingService *billing.Service) *CallsHandler {
 	return &CallsHandler{
-		service:     service,
-		roomService: roomService,
+		service:        service,
+		roomService:    roomService,
+		billingService: billingService,
 	}
 }
 
@@ -137,6 +140,15 @@ func (h *CallsHandler) GenerateToken(w http.ResponseWriter, r *http.Request) {
 		logger.Error.Printf("Failed to generate token: %v", err)
 		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
 		return
+	}
+
+	// Start billing session
+	// We do this asynchronously to not block the token generation
+	// But for reliability, synchronous might be better. Billing is critical.
+	// Let's do it synchronously for now.
+	if err := h.billingService.StartSession(r.Context(), userID, room.ID, req.SessionID, room.CreatedBy, isCreator); err != nil {
+		// Log error but don't fail the request, user should still be able to join
+		logger.Error.Printf("Failed to start billing session for user %s in room %s: %v", userID, room.ID, err)
 	}
 
 	w.Header().Set("Content-Type", "application/json")

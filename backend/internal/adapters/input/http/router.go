@@ -19,7 +19,7 @@ type Router struct {
 	roomHandler         *httpHandlers.RoomHandler
 	chatHandler         *httpHandlers.ChatHandler
 	callsHandler        *httpHandlers.CallsHandler
-	bandwidthHandler    *httpHandlers.BandwidthHandler
+	billingHandler      *httpHandlers.BillingHandler
 	appointmentHandler  *httpHandlers.AppointmentHandler
 	availabilityHandler *httpHandlers.AvailabilityHandler
 	eventTypeHandler    *httpHandlers.EventTypeHandler
@@ -34,7 +34,7 @@ func NewRouter(
 	roomHandler *httpHandlers.RoomHandler,
 	chatHandler *httpHandlers.ChatHandler,
 	callsHandler *httpHandlers.CallsHandler,
-	bandwidthHandler *httpHandlers.BandwidthHandler,
+	billingHandler *httpHandlers.BillingHandler,
 	appointmentHandler *httpHandlers.AppointmentHandler,
 	availabilityHandler *httpHandlers.AvailabilityHandler,
 	eventTypeHandler *httpHandlers.EventTypeHandler,
@@ -49,7 +49,7 @@ func NewRouter(
 		roomHandler:         roomHandler,
 		chatHandler:         chatHandler,
 		callsHandler:        callsHandler,
-		bandwidthHandler:    bandwidthHandler,
+		billingHandler:      billingHandler,
 		appointmentHandler:  appointmentHandler,
 		availabilityHandler: availabilityHandler,
 		eventTypeHandler:    eventTypeHandler,
@@ -120,12 +120,14 @@ func (r *Router) Setup() http.Handler {
 	calls.HandleFunc("/sessions", r.callsHandler.CreateSession).Methods("POST")
 	calls.HandleFunc("/sessions/token", r.callsHandler.GenerateToken).Methods("POST")
 
-	// Protected routes - Bandwidth
-	bandwidth := api.PathPrefix("/bandwidth").Subrouter()
-	bandwidth.Use(r.authMiddleware.Authenticate)
-	bandwidth.HandleFunc("/report", r.bandwidthHandler.ReportBandwidth).Methods("POST")
-	bandwidth.HandleFunc("/stats", r.bandwidthHandler.GetStats).Methods("GET")
-	bandwidth.HandleFunc("/history", r.bandwidthHandler.GetHistory).Methods("GET")
+	// Protected routes - Billing
+	billing := api.PathPrefix("/billing").Subrouter()
+	billing.Use(r.authMiddleware.Authenticate)
+	billing.HandleFunc("/session/end", r.billingHandler.EndSession).Methods("POST")
+	billing.HandleFunc("/usage", r.billingHandler.GetCurrentUsage).Methods("GET")
+	billing.HandleFunc("/usage/{period}", r.billingHandler.GetUsageByPeriod).Methods("GET")
+	billing.HandleFunc("/history", r.billingHandler.GetHistory).Methods("GET")
+	billing.HandleFunc("/sync", r.billingHandler.SyncUsage).Methods("POST")
 
 	// Protected routes - Appointments
 	appointments := api.PathPrefix("/appointments").Subrouter()
